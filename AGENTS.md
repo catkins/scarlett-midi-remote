@@ -40,6 +40,7 @@ If the live panel is open, glance at that too — the snapshot fixture can diffe
 - Hosted cache keys must not contain `{{ checksum … }}` (interpolation parse error). Use `$BUILDKITE_COMMIT`.
 - Do not put `{{testExamples}}` in `.buildkite/pipeline.yml` (same interpolation). File splitting is optional; `./scripts/ci.sh test` maps `*.swift` args to `--filter`.
 - Test step is `bktec run` with `tests#v1.0.0` (`test-runner: custom`, JUnit at `tmp/swift-test-results.xml`). Use `--xunit-output=path` (equals) or Swift writes `*-swift-testing.xml` instead.
+- App step uploads `tmp/ScarlettMidiControl.app.zip` and annotates the build (`context: app-download`) with a download link. Upload inside the step so the URL exists before `annotate`.
 - App artifact: `./scripts/ci.sh build` → `tmp/ScarlettMidiControl.app.zip` (`artifact_paths` on the App step).
 - `Package.swift` is tools 6.0, language mode v5, test targets v6 so `import Testing` works on Xcode agents
 - `gh` GitHub auth may be stale; use Origin + Buildkite APIs instead

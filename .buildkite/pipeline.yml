@@ -41,8 +41,6 @@ steps:
   - label: ":package: App"
     key: build
     command: ./scripts/ci.sh build
-    artifact_paths:
-      - "tmp/ScarlettMidiControl.app.zip"
     cache:
       name: swift-app-v2
       paths:

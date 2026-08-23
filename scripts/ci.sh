@@ -103,13 +103,33 @@ run_test() {
 
 run_build() {
   setup_xcode
-  local app zip
+  local app zip size
   app="$(./scripts/bundle-app.sh release)"
   mkdir -p tmp
   zip="tmp/ScarlettMidiControl.app.zip"
   rm -f "$zip"
   ditto -c -k --keepParent "$app" "$zip"
-  echo "Built $zip ($(du -h "$zip" | awk '{print $1}'))"
+  size="$(du -h "$zip" | awk '{print $1}')"
+  echo "Built $zip ($size)"
+
+  if [[ -n "${BUILDKITE:-}" ]]; then
+    annotate_app_artifact "$zip" "$size"
+  fi
+}
+
+annotate_app_artifact() {
+  local zip="$1"
+  local size="$2"
+  local url fallback
+  buildkite-agent artifact upload "$zip"
+  url="$(buildkite-agent artifact search "ScarlettMidiControl.app.zip" --format "%u" | head -n 1)"
+  fallback="https://buildkite.com/${BUILDKITE_ORGANIZATION_SLUG}/${BUILDKITE_PIPELINE_SLUG}/builds/${BUILDKITE_BUILD_NUMBER}#artifacts"
+  if [[ -z "$url" ]]; then
+    url="$fallback"
+  fi
+  buildkite-agent annotate --style success --context app-download <<EOF
+:package: **[Download ScarlettMidiControl.app.zip](${url})** (${size})
+EOF
 }
 
 cmd="${1:-all}"
