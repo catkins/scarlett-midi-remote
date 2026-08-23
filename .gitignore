@@ -36,3 +36,6 @@ ScarlettMidiControl.xcodeproj/
 # Logs
 *.log
 
+# Test Engine JUnit from scripts/ci.sh
+tmp/
+

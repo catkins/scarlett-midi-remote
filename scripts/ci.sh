@@ -49,10 +49,15 @@ run_test() {
     )
   fi
 
+  # Hosted Xcode writes Swift Testing XML to <name>-swift-testing.xml unless
+  # --xunit-output=path uses an equals sign. Keep results off the .build cache volume.
   result_path="${BUILDKITE_TEST_ENGINE_RESULT_PATH:-}"
+  if [[ -z "$result_path" && -n "${BUILDKITE:-}" ]]; then
+    result_path="tmp/swift-test-results.xml"
+  fi
   if [[ -n "$result_path" ]]; then
     mkdir -p "$(dirname "$result_path")"
-    swift_test+=(--xunit-output "$result_path")
+    swift_test+=(--xunit-output="$result_path")
   fi
 
   # Optional file list from bktec {{testExamples}}: map FooTests.swift -> --filter FooTests.
@@ -65,6 +70,18 @@ run_test() {
   done
 
   "${swift_test[@]}"
+
+  if [[ -n "$result_path" ]]; then
+    sibling="${result_path%.xml}-swift-testing.xml"
+    if [[ ! -f "$result_path" && -f "$sibling" ]]; then
+      mv "$sibling" "$result_path"
+    fi
+    if [[ ! -f "$result_path" ]]; then
+      echo "error: expected JUnit XML at $result_path" >&2
+      ls -la "$(dirname "$result_path")" >&2 || true
+      exit 1
+    fi
+  fi
 }
 
 cmd="${1:-all}"

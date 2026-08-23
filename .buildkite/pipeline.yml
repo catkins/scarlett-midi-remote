@@ -25,7 +25,7 @@ steps:
           test-runner: custom
           test-cmd: ./scripts/ci.sh test
           test-file-pattern: Tests/**/*Tests.swift
-          result-path: .build/test-results.xml
+          result-path: tmp/swift-test-results.xml
           suite-slug: scarlett-midi-remote
           upload-results: true
           fail-on-no-tests: true
