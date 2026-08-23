@@ -1,0 +1,53 @@
+name: ScarlettMidiControl
+options:
+  developmentLanguage: en
+targets:
+  ScarlettMidiControl:
+    type: application
+    platform: macOS
+    deploymentTarget: "12.0"
+    sources:
+      - path: App
+      - path: Sources
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.example.ScarlettMidiControl
+      CODE_SIGN_STYLE: Automatic
+      DEVELOPMENT_TEAM: ""
+      INFOPLIST_FILE: App/Info.plist
+      SUPPORTS_MACCATALYST: NO
+    dependencies:
+      - target: FocusriteControlKit
+      - target: MidiKit
+      - target: PersistenceKit
+    prebuildScripts: []
+    postbuildScripts: []
+  FocusriteControlKit:
+    type: framework
+    platform: macOS
+    deploymentTarget: "12.0"
+    sources:
+      - path: Sources/FocusriteControlKit
+  MidiKit:
+    type: framework
+    platform: macOS
+    deploymentTarget: "12.0"
+    sources:
+      - path: Sources/MidiKit
+  PersistenceKit:
+    type: framework
+    platform: macOS
+    deploymentTarget: "12.0"
+    sources:
+      - path: Sources/Persistence
+schemes:
+  ScarlettMidiControl:
+    build:
+      targets:
+        ScarlettMidiControl: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    archive:
+      config: Release
+
