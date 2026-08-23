@@ -59,6 +59,31 @@ Prereqs:
 - Classic Focusrite Control installed (not Control 2), so `FocusriteControlServer` runs locally
 - Homebrew (for XcodeGen), optional but recommended
 
+### Origin repository
+
+This project is developed in a Cursor **New Project** draft (`tmp-*` name). To use a permanent repo name:
+
+**Option A — Publish the draft (recommended)**  
+In the Cursor agent run UI, use **Publish** (or equivalent) and set the repo name to `scarlett-midi-control`. Draft repos are renamed on first publish.
+
+**Option B — Create a new repo from your Mac**  
+The Cloud Agent session cannot call `origin repo create` (token scoped to the draft only). On your machine:
+
+```bash
+origin auth login
+./scripts/create-origin-repo.sh
+```
+
+Or manually:
+
+```bash
+origin repo create catkins/scarlett-midi-control
+git remote set-url origin https://origin.cursor.com/git/catkins/scarlett-midi-control.git
+git push -u origin main
+```
+
+Current draft URL (until published): `https://origin.cursor.com/git/catkins/tmp-2dbf9251e3f2a0f2`
+
 Steps:
 1. Generate the Xcode project (we keep sources committed and generate the .xcodeproj locally):
    ```bash
