@@ -144,3 +144,15 @@ Thanks to community reverse‑engineering efforts that documented parts of the c
 # New project
 
 This project was created by a Cursor cloud agent.
+
+---
+
+## CI
+
+Tests and SwiftLint run on Buildkite (org `catkins-test`, hosted macOS queue `hosted-macos`).
+
+- Pipeline definition: `.buildkite/pipeline.yml` (lint + `swift test`)
+- Local: `./scripts/ci.sh` — runs `swift test`, and SwiftLint when it is installed (`brew install swiftlint`)
+- SwiftLint config: `.swiftlint.yml` (relaxed Swift 6 / SwiftUI rules)
+
+The Buildkite pipeline clones `https://origin.cursor.com/catkins/scarlett-midi-remote.git`. There is no GitHub remote, so GitHub webhooks are not configured; start builds from the Buildkite UI until a GitHub repo is connected.

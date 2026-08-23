@@ -1,0 +1,35 @@
+agents:
+  queue: hosted-macos
+
+steps:
+  - label: ":swift: Lint"
+    key: lint
+    command: |
+      set -euo pipefail
+      if [[ ! -d /Applications/Xcode.app && -d /Library/Developer/CommandLineTools/usr/lib/sourcekitdInProc.framework ]]; then
+        export DYLD_FRAMEWORK_PATH="/Library/Developer/CommandLineTools/usr/lib${DYLD_FRAMEWORK_PATH:+:$DYLD_FRAMEWORK_PATH}"
+      fi
+      if ! command -v swiftlint >/dev/null 2>&1; then
+        brew install swiftlint
+      fi
+      swiftlint lint --config .swiftlint.yml
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 143
+          limit: 2
+
+  - label: ":swift: Test"
+    key: test
+    command: swift test
+    cache:
+      paths:
+        - ".build"
+      key: "swift-build-{{ checksum 'Package.swift' }}"
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 143
+          limit: 2
