@@ -38,3 +38,15 @@ steps:
           limit: 2
         - exit_status: 143
           limit: 2
+
+  - label: ":package: App"
+    key: build
+    command: ./scripts/ci.sh build
+    artifact_paths:
+      - "tmp/ScarlettMidiControl.app.zip"
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 143
+          limit: 2

@@ -3,6 +3,7 @@
 #   ./scripts/ci.sh          # lint then test (local default)
 #   ./scripts/ci.sh lint
 #   ./scripts/ci.sh test
+#   ./scripts/ci.sh build    # release .app zip for Buildkite artifacts
 #
 # On Buildkite, bktec invokes `./scripts/ci.sh test` and sets
 # BUILDKITE_TEST_ENGINE_RESULT_PATH to a JUnit XML path.
@@ -10,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 usage() {
-  echo "usage: $0 [lint|test|all]" >&2
+  echo "usage: $0 [lint|test|build|all]" >&2
   exit 2
 }
 
@@ -84,6 +85,16 @@ run_test() {
   fi
 }
 
+run_build() {
+  local app zip
+  app="$(./scripts/bundle-app.sh release)"
+  mkdir -p tmp
+  zip="tmp/ScarlettMidiControl.app.zip"
+  rm -f "$zip"
+  ditto -c -k --keepParent "$app" "$zip"
+  echo "Built $zip ($(du -h "$zip" | awk '{print $1}'))"
+}
+
 cmd="${1:-all}"
 if [[ $# -gt 0 ]]; then
   shift
@@ -91,6 +102,7 @@ fi
 case "$cmd" in
   lint) run_lint ;;
   test) run_test "$@" ;;
+  build) run_build ;;
   all)
     run_lint
     run_test
