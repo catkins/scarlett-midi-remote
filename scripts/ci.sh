@@ -124,8 +124,10 @@ annotate_app_artifact() {
   local size="$2"
   local url fallback
   buildkite-agent artifact upload "$zip"
-  url="$(buildkite-agent artifact search "ScarlettMidiControl.app.zip" --format "%u" | head -n 1)"
   fallback="https://buildkite.com/${BUILDKITE_ORGANIZATION_SLUG}/${BUILDKITE_PIPELINE_SLUG}/builds/${BUILDKITE_BUILD_NUMBER}#artifacts"
+  # Search the uploaded path (`tmp/…`), not the basename — otherwise search
+  # exits 1 and `set -e` fails a successful app build.
+  url="$(buildkite-agent artifact search "$zip" --format "%u" | head -n 1 || true)"
   if [[ -z "$url" ]]; then
     url="$fallback"
   fi
