@@ -28,7 +28,7 @@ steps:
             - language=swift
             - os=macos
     cache:
-      name: swift-test-v2
+      name: swift-test-v3
       paths:
         - ".build"
     retry:
@@ -42,7 +42,7 @@ steps:
     key: build
     command: ./scripts/ci.sh build
     cache:
-      name: swift-app-v2
+      name: swift-app-v3
       paths:
         - ".build"
     retry:
