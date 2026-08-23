@@ -22,7 +22,22 @@ setup_sourcekit() {
   fi
 }
 
+# Hosted agents sometimes start with a bare toolchain; SwiftShims lives in the Xcode SDK.
+setup_xcode() {
+  if [[ -d /Applications/Xcode.app/Contents/Developer ]]; then
+    export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+  fi
+  if command -v xcrun >/dev/null 2>&1; then
+    export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
+  fi
+  echo "DEVELOPER_DIR=${DEVELOPER_DIR:-}"
+  echo "SDKROOT=${SDKROOT:-}"
+  xcode-select -p || true
+  swift --version || true
+}
+
 run_lint() {
+  setup_xcode
   setup_sourcekit
   if ! command -v swiftlint >/dev/null 2>&1; then
     if [[ -n "${BUILDKITE:-}" ]]; then
@@ -36,6 +51,7 @@ run_lint() {
 }
 
 run_test() {
+  setup_xcode
   # Hosted Xcode agents already expose Testing. Command Line Tools need extra
   # search/rpath flags or `import Testing` fails at compile or dyld time.
   swift_test=(swift test)
@@ -86,6 +102,7 @@ run_test() {
 }
 
 run_build() {
+  setup_xcode
   local app zip
   app="$(./scripts/bundle-app.sh release)"
   mkdir -p tmp
