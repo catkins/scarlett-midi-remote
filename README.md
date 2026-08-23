@@ -1,6 +1,17 @@
-## Scarlett MIDI Control
+<p align="center">
+  <img src="docs/app-icon.png" width="96" height="96" alt="Scarlett MIDI Control">
+</p>
 
-macOS menu-bar app that talks to **classic Focusrite Control** (not Control 2) so you can drive a **Scarlett 18i20 (2nd Gen)** mixer from MIDI and a compact SwiftUI panel.
+<h1 align="center">Scarlett MIDI Control</h1>
+
+<p align="center">
+  macOS menu-bar mixer for <strong>classic Focusrite Control</strong> — drive a
+  <strong>Scarlett 18i20 (2nd Gen)</strong> from MIDI and a compact SwiftUI panel.
+</p>
+
+<p align="center">
+  <img src="docs/mixer.png" width="380" alt="Mixer panel">
+</p>
 
 It does not copy any proprietary Focusrite code. Parameter IDs are discovered at runtime from `<device-arrival>`.
 
@@ -26,6 +37,17 @@ It does not copy any proprietary Focusrite code. Parameter IDs are discovered at
 That builds with SwiftPM, wraps an ad-hoc `.app`, and relaunches the menu-bar extra. Click the **mixer fader** icon (`slider.vertical.3`) in the menu bar.
 
 Optional XcodeGen project: `xcodegen generate` then open `ScarlettMidiControl.xcodeproj`.
+
+### Opening a downloaded build
+
+CI uploads an ad-hoc-signed zip. Gatekeeper will refuse it with *Apple could not verify “ScarlettMidiControl”* and only **Move to Trash** / **Done**. After unzipping:
+
+```bash
+xattr -dr com.apple.quarantine ScarlettMidiControl.app
+open ScarlettMidiControl.app
+```
+
+Or System Settings → Privacy & Security → **Open Anyway**. Local `./scripts/run-local.sh` builds skip this.
 
 ### MIDI Learn
 1. Click the piano-keys button on the connection row (it turns ember when armed).
