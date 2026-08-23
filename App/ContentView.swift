@@ -16,7 +16,7 @@ struct ContentView: View {
                     MidiMappingView()
                 }
             }
-            .listStyle(.insetGrouped)
+            .listStyle(.inset)
             .navigationTitle("Scarlett MIDI Control")
         }
         .frame(minWidth: 920, minHeight: 600)

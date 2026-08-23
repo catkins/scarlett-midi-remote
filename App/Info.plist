@@ -22,6 +22,8 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Scarlett MIDI Control contributors</string>
+	<key>LSUIElement</key>
+	<true/>
 </dict>
 </plist>
 

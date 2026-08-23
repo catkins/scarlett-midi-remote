@@ -34,7 +34,8 @@ let package = Package(
         .testTarget(
             name: "FocusriteControlKitTests",
             dependencies: ["FocusriteControlKit"],
-            path: "Tests/FocusriteControlKitTests"
+            path: "Tests/FocusriteControlKitTests",
+            swiftSettings: [.swiftLanguageMode(.v6)]
         )
     ],
     swiftLanguageModes: [.v5]

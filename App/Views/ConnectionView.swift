@@ -7,36 +7,46 @@ struct ConnectionView: View {
     @StateObject private var viewModel = ConnectionViewModel()
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Circle()
-                    .fill(viewModel.state.color)
-                    .frame(width: 12, height: 12)
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 8))
+                .foregroundStyle(viewModel.state.color)
+                .accessibilityHidden(true)
+            
+            VStack(alignment: .leading, spacing: 2) {
                 Text(viewModel.state.description)
                     .font(.headline)
-                Spacer()
-                Button(action: viewModel.discover) {
-                    Label("Discover", systemImage: "dot.radiowaves.left.and.right")
-                }
-                Button(action: viewModel.connect) {
-                    Label("Connect", systemImage: "link")
-                }
-                .disabled(!viewModel.canConnect)
+                Text(serverSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            if let server = viewModel.discoveredServer {
-                Text("Discovered: \(server.host):\(server.port)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+            
+            Spacer(minLength: 8)
+            
+            if viewModel.showDisconnect {
+                Button("Disconnect", action: viewModel.disconnect)
+                    .controlSize(.small)
             } else {
-                Text("No server discovered yet. Ensure Focusrite Control is installed and running.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                Button("Discover", action: viewModel.discover)
+                    .controlSize(.small)
+                Button("Connect", action: viewModel.connect)
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!viewModel.canConnect)
             }
         }
-        .padding(.vertical, 8)
         .onAppear {
             viewModel.bind(appState: appState)
         }
+    }
+    
+    private var serverSummary: String {
+        if let server = viewModel.discoveredServer {
+            return "\(server.host):\(server.port)"
+        }
+        return "Focusrite Control must be running to discover a server."
     }
 }
 
@@ -47,15 +57,34 @@ final class ConnectionViewModel: ObservableObject {
     private var appState: AppState?
     private var cancellables: Set<AnyCancellable> = []
     
-    var canConnect: Bool { discoveredServer != nil && state == .discovered }
+    var canConnect: Bool {
+        discoveredServer != nil && !showDisconnect
+    }
+    
+    var showDisconnect: Bool {
+        switch state {
+        case .connecting, .awaitingApproval, .connected: return true
+        default: return false
+        }
+    }
     
     func bind(appState: AppState) {
+        guard self.appState == nil else { return }
         self.appState = appState
         appState.discoveryService.discoveredPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] server in
-                self?.discoveredServer = server
-                self?.state = .discovered
+                guard let self else { return }
+                self.discoveredServer = server
+                if case .disconnected = self.state { self.state = .discovered }
+                switch self.state {
+                case .disconnected, .discovered, .discovering, .error:
+                    if appState.settingsStore.autoReconnect {
+                        appState.controlClient.connect(to: server)
+                    }
+                default:
+                    break
+                }
             }
             .store(in: &cancellables)
         
@@ -65,15 +94,22 @@ final class ConnectionViewModel: ObservableObject {
                 self?.state = newState
             }
             .store(in: &cancellables)
+        
+        discover()
     }
     
     func discover() {
+        if case .disconnected = state { state = .discovering }
         appState?.discoveryService.startDiscovery()
     }
     
     func connect() {
         guard let server = discoveredServer else { return }
         appState?.controlClient.connect(to: server)
+    }
+    
+    func disconnect() {
+        appState?.controlClient.disconnect()
     }
 }
 
@@ -99,4 +135,3 @@ extension ConnectionState {
         }
     }
 }
-

@@ -5,15 +5,16 @@ targets:
   ScarlettMidiControl:
     type: application
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "14.0"
     sources:
       - path: App
-      - path: Sources
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.example.ScarlettMidiControl
       CODE_SIGN_STYLE: Automatic
+      CODE_SIGN_IDENTITY: "-"
       DEVELOPMENT_TEAM: ""
       INFOPLIST_FILE: App/Info.plist
+      INFOPLIST_KEY_LSUIElement: YES
       SUPPORTS_MACCATALYST: NO
     dependencies:
       - target: FocusriteControlKit
@@ -24,19 +25,21 @@ targets:
   FocusriteControlKit:
     type: framework
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "14.0"
     sources:
       - path: Sources/FocusriteControlKit
   MidiKit:
     type: framework
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "14.0"
     sources:
       - path: Sources/MidiKit
+    dependencies:
+      - target: PersistenceKit
   PersistenceKit:
     type: framework
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "14.0"
     sources:
       - path: Sources/Persistence
 schemes:

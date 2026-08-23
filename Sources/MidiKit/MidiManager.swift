@@ -1,8 +1,10 @@
 import Foundation
 import CoreMIDI
+import PersistenceKit
 
 public protocol MidiManagerProtocol {
     var onLearnedMessage: ((MidiMessage) -> Void)? { get set }
+    var onMessage: ((MidiMessage) -> Void)? { get set }
     func availableInputs() -> [MidiInputInfo]
     func selectInput(uid: Int32)
     // Back-compat helpers (optional)
@@ -55,6 +57,7 @@ public final class MidiManager: NSObject, MidiManagerProtocol {
     private let settingsStore: SettingsStoring
     
     public var onLearnedMessage: ((MidiMessage) -> Void)?
+    public var onMessage: ((MidiMessage) -> Void)?
     
     public init(settingsStore: SettingsStoring) {
         self.settingsStore = settingsStore
@@ -151,6 +154,8 @@ public final class MidiManager: NSObject, MidiManagerProtocol {
                 }
                 if mySelf.learningEnabled {
                     mySelf.onLearnedMessage?(message)
+                } else {
+                    mySelf.onMessage?(message)
                 }
             }
             packet = MIDIPacketNext(&packet).pointee

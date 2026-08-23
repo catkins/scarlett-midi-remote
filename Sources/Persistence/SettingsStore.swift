@@ -8,7 +8,10 @@ public protocol SettingsStoreProtocol: AnyObject, SettingsStoring {
 public protocol SettingsStoring: AnyObject {
     var selectedMidiInputUID: Int32? { get set }
     var clientName: String { get set }
+    var clientKey: String { get set }
     var autoReconnect: Bool { get set }
+    var hiddenOutputIds: [String] { get set }
+    var didCustomizeHiddenOutputs: Bool { get set }
 }
 
 public final class SettingsStore: SettingsStoreProtocol {
@@ -42,6 +45,29 @@ public final class SettingsStore: SettingsStoreProtocol {
         set { userDefaults.set(newValue, forKey: "autoReconnect") }
     }
     
+    public var clientKey: String {
+        get {
+            if let existing = userDefaults.string(forKey: "clientKey"), !existing.isEmpty {
+                return existing
+            }
+            let generated = UUID().uuidString
+            userDefaults.set(generated, forKey: "clientKey")
+            return generated
+        }
+        set { userDefaults.set(newValue, forKey: "clientKey") }
+    }
+    
+
+    public var hiddenOutputIds: [String] {
+        get { userDefaults.stringArray(forKey: "hiddenOutputIds") ?? [] }
+        set { userDefaults.set(newValue, forKey: "hiddenOutputIds") }
+    }
+
+    public var didCustomizeHiddenOutputs: Bool {
+        get { userDefaults.bool(forKey: "didCustomizeHiddenOutputs") }
+        set { userDefaults.set(newValue, forKey: "didCustomizeHiddenOutputs") }
+    }
+
     public func saveMappings<T: Encodable>(_ items: T) {
         do {
             let url = try mappingsURL()

@@ -1,72 +1,83 @@
 # Classic Focusrite Control protocol (notes)
 
-This document tracks public, reverse‑engineered behavior that should be VERIFIED against a live `FocusriteControlServer`. Do not treat this as authoritative; contribute updates as you test.
+Verified against a live `FocusriteControlServer` on macOS talking to a Scarlett 18i20 (2nd Gen). Still treat device-specific parameter IDs as discovered at runtime, not hardcoded.
 
 References (do not vendor their code):
-- `https://github.com/raduvarga/Focusrite-Midi-Control` (Swift macOS, Gen 2 era)
+- `https://github.com/raduvarga/Focusrite-Midi-Control` (public reverse-engineering notes)
 - `https://gist.github.com/daveyijzermans/f0354858b3eb765e19361ab85a6bc55b` (UDP discovery)
 - `https://github.com/Mathieu2301/Focusrite-Control-API` (Node API over classic server)
 
-## Discovery (UDP)
+## Discovery (UDP) — verified
 
-Client broadcasts to ports 30096, 30097, 30098 (same payload to each):
+Client sends a framed payload to ports 30096, 30097, 30098 (localhost unicast is enough when the server is on the same Mac):
 
 ```
 Length=<6hex> <client-discovery app="SAFFIRE-CONTROL" version="4" device="iOS"/>
 ```
 
-Server replies with XML that includes a listening TCP port (often near 49152). Prefer discovery to hardcoding the port, as it can vary.
-
-Open questions:
-- Exact casing and attributes of the `client-discovery` element
-- Whether replies are unicast to the sender or broadcast
-- Encoding: UTF‑8 assumed
-
-## Framing
-
-Messages are wrapped with ASCII headers (and often footers):
+Live reply:
 
 ```
-Length=0001AF <xml ...> Length=0001AF
+Length=000068 <server-announcement app='SAFFIRE-CONTROL' version='4' hostname='…' port='49152'/>
 ```
 
-- The 6‑digit hex after `Length=` is the payload length in bytes (XML only, not counting the headers).
-- Some implementations accept the message if only the header is present.
+Use the UDP source address as the TCP host (the hostname attribute can be a `.localdomain` name). Prefer discovery over pinning a port.
 
-Our `ProtocolFraming` accepts both header+footer and header‑only during bring‑up, and always emits header+footer on send. Tighten if needed once behavior is verified.
+## Framing — verified
 
-## TCP handshake
+The server concatenates header-only frames:
 
-After connecting to the discovered TCP port:
-1. Send client details (name + key). Example (UNVERIFIED):
+```
+Length=00002b <client-details id="…" />Length=007447 <device-arrival>…</device-arrival>
+```
+
+- `Length=` + 6 hex digits + space + UTF-8 XML payload
+- Length is payload bytes only
+- Footer is optional; we send header-only to match the server
+
+## TCP handshake — verified
+
+1. Connect to the announced TCP port.
+2. Send:
    ```xml
-   <client-details name="Scarlett MIDI Control" key="swiftui"/>
+   <client-details hostname="Scarlett MIDI Control" client-key="{stable-uuid}"/>
    ```
-2. Periodic keep‑alive every ~3s:
+   Persist `client-key` so Focusrite Control can remember approval.
+3. Keep-alive every ~3s: `<keep-alive/>`
+4. Server replies with `<client-details id="…"/>`, then `<device-arrival>` for each device, then a `<set devid="…">` snapshot of current values.
+5. Subscribe:
    ```xml
-   <keep-alive/>
+   <device-subscribe devid="1" subscribe="true"/>
    ```
-3. Expect a device description and an approval state; the user approves the client in Focusrite Control UI, then the connection transitions to "connected" and value updates flow.
+6. Approve the client in Focusrite Control → Settings → Remote Devices. Writes are ignored until authorised. Expect:
+   ```xml
+   <approval id="…" authorised="true"/>
+   ```
 
-Open questions:
-- Exact XML tags/attributes for approval, subscription, and device parameters
-- Subscription/resubscription semantics
-- Snapshot request format
+## Device model (Scarlett 18i20 Gen 2) — verified live
 
-## Device model (Scarlett 18i20 Gen 2)
+Do not hardcode IDs. Parse them from `<device-arrival>`:
 
-Initial target parameters:
-- Monitor Left / Right volume (dB)
-- Monitor mute (boolean)
-- Mix outputs (nice‑to‑have after MVP)
+- Analogue `name="Monitor Output 1|2"` → `gain` / `mute` child ids (software per-channel)
+- `monitoring/hardware-controls` → stereo hardware `gain`, `dim`, `mute`, plus `min-gain` / `max-gain` (live: −128…0 dB)
 
-As you verify XML parameter paths, map them into `Scarlett18i20Gen2Model` and implement:
-- `requestDeviceSnapshot()` to populate the model
-- setters (e.g., `setMonitorMute(_)`) that encode the correct control message
+Set values:
 
-## Tips
+```xml
+<set devid="1"><item id="1127" value="-27"/><item id="1129" value="true"/></set>
+```
 
-- If device isn't detected, quitting and relaunching Focusrite Control often restarts the server and fixes discovery.
-- Keep discovery defaulting to UDP; avoid pinning a single TCP port.
-- Keep only a single selected MIDI input open; do not listen to all ports at once.
+Inbound snapshots use the same `<set>` / `<item>` shape.
 
+
+## Mixer (per-output mix) — verified live
+
+Each hardware output’s `source` value is a mix id (Mix A–E, L/R pair). Mixer input slots have `source` (hardware/playback element id) and `stereo`. When `stereo` is true, two consecutive slots are one strip — one fader writes both (and the paired R mix).
+
+Empty slots are omitted from the snapshot (treat missing mute/solo/source as false/empty).
+
+Writes:
+
+```xml
+<set devid="1"><item id="55" value="0"/><item id="57" value="true"/></set>
+```
