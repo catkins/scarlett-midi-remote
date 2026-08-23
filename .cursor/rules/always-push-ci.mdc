@@ -1,0 +1,15 @@
+---
+description: Commit and push finished work so Buildkite can check it
+alwaysApply: true
+---
+
+# Always push so CI can check
+
+Local `swift test` often cannot run (Command Line Tools only). Hosted Buildkite is the real runner.
+
+After finishing a change on this repo:
+- Commit it (this project overrides the default “only commit when asked”)
+- `git push origin HEAD` so `origin/main` triggers Buildkite
+- Do not leave finished work sitting in the working tree
+
+Never replace the `origin` remote. Origin is `https://origin.cursor.com/catkins/scarlett-midi-remote.git`.

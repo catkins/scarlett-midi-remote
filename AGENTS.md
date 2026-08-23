@@ -10,6 +10,9 @@ Repo: `https://origin.cursor.com/catkins/scarlett-midi-remote.git` (`origin` onl
 - Tests: `swift test` needs full Xcode. This Mac often has Command Line Tools only; CI is the real runner
 - Lint+test helper: `./scripts/ci.sh`
 
+## Always push
+Local `swift test` is often unavailable (Command Line Tools only). After finishing a change, **commit and `git push origin HEAD`** so Buildkite on `origin/main` can lint/test/build. Do not leave finished work only in the working tree. Never replace the `origin` remote.
+
 ## After every visual change
 `run-local.sh` kills the previous `ScarlettMidiControl` and opens the new bundle. An already-running process keeps the old UI and the old CPU path — **do not skip the relaunch**.
 1. `./scripts/run-local.sh`
