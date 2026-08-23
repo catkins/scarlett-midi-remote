@@ -28,7 +28,7 @@ steps:
             - language=swift
             - os=macos
     cache:
-      name: swift-test-v3
+      name: swift-test-v4
       paths:
         - ".build"
     retry:
@@ -44,7 +44,7 @@ steps:
     artifact_paths:
       - tmp/ScarlettMidiControl.app.zip
     cache:
-      name: swift-app-v3
+      name: swift-app-v4
       paths:
         - ".build"
     retry:

@@ -25,11 +25,16 @@ setup_sourcekit() {
 # Hosted agents sometimes start with a bare toolchain; SwiftShims lives in the Xcode SDK.
 setup_xcode() {
   # Hosted images expose both Xcode.app and Xcode_26.x.app. A pre-set SDKROOT
-  # from the other tree makes SwiftShims vanish.
+  # from the other tree makes SwiftShims vanish. Unset first — `xcrun --show-sdk-path`
+  # echoes the inherited SDKROOT even after DEVELOPER_DIR is retargeted.
+  unset SDKROOT
   if [[ -d /Applications/Xcode.app/Contents/Developer ]]; then
     export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
   fi
-  if command -v xcrun >/dev/null 2>&1; then
+  local sdk_dir="${DEVELOPER_DIR:-}/Platforms/MacOSX.platform/Developer/SDKs"
+  if [[ -d "${sdk_dir}/MacOSX.sdk" ]]; then
+    export SDKROOT="${sdk_dir}/MacOSX.sdk"
+  elif command -v xcrun >/dev/null 2>&1; then
     export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
   fi
   echo "DEVELOPER_DIR=${DEVELOPER_DIR:-}"
