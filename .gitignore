@@ -1,0 +1,38 @@
+# Xcode
+DerivedData/
+build/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SwiftPM
+.build/
+.swiftpm/xcode/package.xcworkspace/
+
+# CocoaPods (not used, but ignore in case)
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# XcodeGen output (will be generated locally)
+ScarlettMidiControl.xcodeproj/
+
+# User-specific
+.DS_Store
+
+# Logs
+*.log
+
