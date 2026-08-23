@@ -3,6 +3,9 @@
 #   ./scripts/ci.sh          # lint then test (local default)
 #   ./scripts/ci.sh lint
 #   ./scripts/ci.sh test
+#
+# On Buildkite, bktec invokes `./scripts/ci.sh test` and sets
+# BUILDKITE_TEST_ENGINE_RESULT_PATH to a JUnit XML path.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -45,13 +48,32 @@ run_test() {
       -Xlinker -rpath -Xlinker "${clt_lib}"
     )
   fi
+
+  result_path="${BUILDKITE_TEST_ENGINE_RESULT_PATH:-}"
+  if [[ -n "$result_path" ]]; then
+    mkdir -p "$(dirname "$result_path")"
+    swift_test+=(--xunit-output "$result_path")
+  fi
+
+  # Optional file list from bktec {{testExamples}}: map FooTests.swift -> --filter FooTests.
+  for arg in "$@"; do
+    case "$arg" in
+      *.swift)
+        swift_test+=(--filter "$(basename "$arg" .swift)")
+        ;;
+    esac
+  done
+
   "${swift_test[@]}"
 }
 
 cmd="${1:-all}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
 case "$cmd" in
   lint) run_lint ;;
-  test) run_test ;;
+  test) run_test "$@" ;;
   all)
     run_lint
     run_test

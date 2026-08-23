@@ -19,7 +19,19 @@ steps:
 
   - label: ":swift: Test"
     key: test
-    command: ./scripts/ci.sh test
+    command: bktec run
+    plugins:
+      - tests#v1.0.0:
+          test-runner: custom
+          test-cmd: ./scripts/ci.sh test
+          test-file-pattern: Tests/**/*Tests.swift
+          result-path: .build/test-results.xml
+          suite-slug: scarlett-midi-remote
+          upload-results: true
+          fail-on-no-tests: true
+          tags:
+            - language=swift
+            - os=macos
     retry:
       automatic:
         - exit_status: -1
