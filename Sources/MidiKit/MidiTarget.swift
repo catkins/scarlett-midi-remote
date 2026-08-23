@@ -14,8 +14,8 @@ public enum MidiTarget: Equatable, Sendable {
         switch self {
         case .monitorGain: return "monitor"
         case .monitorMute: return "mute"
-            case .outputGain(let id): return "output:\(id):gain"
-            case .outputMute(let id): return "output:\(id):mute"
+        case .outputGain(let id): return "output:\(id):gain"
+        case .outputMute(let id): return "output:\(id):mute"
         case .mixGain(let mixId, let slot): return "strip:\(mixId):\(slot):gain"
         case .mixMute(let mixId, let slot): return "strip:\(mixId):\(slot):mute"
         case .mixSolo(let mixId, let slot): return "strip:\(mixId):\(slot):solo"

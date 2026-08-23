@@ -19,9 +19,6 @@ public struct Scarlett18i20Gen2Model: Equatable {
     public var gainRange: ClosedRange<Double> { min(minGainDb, maxGainDb)...max(minGainDb, maxGainDb) }
     public var mixGainRange: ClosedRange<Double> { min(mixMinGainDb, mixMaxGainDb)...max(mixMinGainDb, mixMaxGainDb) }
 
-    public var monitorLeftDb: Double { monitorDb }
-    public var monitorRightDb: Double { monitorDb }
-
     public init(deviceId: String = "",
                 deviceModel: String = "Scarlett 18i20 (2nd Gen)",
                 monitorDb: Double = -10,

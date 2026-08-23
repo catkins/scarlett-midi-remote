@@ -195,7 +195,6 @@ private struct MixerSnapshotView: View {
                 VisibleMixStrip(id: "p", mixId: "54", slotIndex: 16, title: "Playback 1-2", kind: "playback", stereo: true, gainDb: 0, muted: false, solo: false, meterParamId: "m6")
             ],
             canRefresh: true,
-            learnArmed: false,
             pendingLearnId: nil,
             mappedIds: ["monitor"],
             masterGainTargetId: "monitor",

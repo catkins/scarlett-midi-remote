@@ -17,6 +17,48 @@ struct DeviceXMLTests {
         #expect(DeviceXML.parseSetItems("<keep-alive/>") == nil)
     }
 
+    @Test func parseSetItemsKeepsEmptyValuesAndMissingDeviceId() {
+        let emptyValue = DeviceXML.parseSetItems(#"<set devid="1"><item id="18" value=""/></set>"#)
+        #expect(emptyValue?.deviceId == "1")
+        #expect(emptyValue?.items.count == 1)
+        #expect(emptyValue?.items.first?.id == "18")
+        #expect(emptyValue?.items.first?.value == "")
+
+        let noItems = DeviceXML.parseSetItems(#"<set devid="1"></set>"#)
+        #expect(noItems?.deviceId == "1")
+        #expect(noItems?.items.isEmpty == true)
+
+        let noDevid = DeviceXML.parseSetItems(#"<set><item id="1127" value="-27"/></set>"#)
+        #expect(noDevid?.deviceId == "")
+        #expect(noDevid?.items.first?.id == "1127")
+    }
+
+    @Test func parseSetItemsIgnoresValueFirstAttributeOrder() {
+        let parsed = DeviceXML.parseSetItems(#"<set devid="1"><item value="-27" id="1127"/></set>"#)
+        #expect(parsed?.deviceId == "1")
+        #expect(parsed?.items.isEmpty == true)
+    }
+
+    @Test func parseClientIdReadsClientDetails() {
+        #expect(DeviceXML.parseClientId(#"<client-details id="c1" hostname="Mac"/>"#) == "c1")
+        #expect(DeviceXML.parseClientId("<keep-alive/>") == nil)
+    }
+
+    @Test func parseApprovalAuthorisedAcceptsSpellings() {
+        #expect(DeviceXML.parseApprovalAuthorised(#"<approval id="c1" authorised="true"/>"#) == true)
+        #expect(DeviceXML.parseApprovalAuthorised(#"<approval authorized="1"/>"#) == true)
+        #expect(DeviceXML.parseApprovalAuthorised(#"<approval authorised="false"/>"#) == false)
+        #expect(DeviceXML.parseApprovalAuthorised("<keep-alive/>") == nil)
+    }
+
+    @Test func isTruthyRecognizesTrueAndOne() {
+        #expect(DeviceXML.isTruthy("true"))
+        #expect(DeviceXML.isTruthy("1"))
+        #expect(!DeviceXML.isTruthy("false"))
+        #expect(!DeviceXML.isTruthy("0"))
+        #expect(!DeviceXML.isTruthy(""))
+    }
+
     @Test func setMessageFormatsDeviceAndItems() {
         let xml = DeviceXML.setMessage(
             deviceId: "1",
@@ -58,5 +100,21 @@ struct DeviceXMLTests {
         """
         let map = DeviceXML.parseArrival(xml)
         #expect(map?.deviceId == "1")
+        #expect(map?.deviceModel == "Scarlett 18i20 2nd Gen")
+        #expect(map?.hardwareGainId == "1127")
+        #expect(map?.hardwareMuteId == "1129")
+        #expect(map?.hardwareDimId == "1130")
+        #expect(map?.minGainDb == -128)
+        #expect(map?.maxGainDb == 0)
+        #expect(map?.inputs.contains(where: { $0.factoryName == "Analogue 1" }) == true)
+    }
+
+    @Test func parseArrivalReturnsNilWithoutDeviceId() {
+        let xml = """
+        <device-arrival>
+          <device model="Scarlett 18i20 2nd Gen"></device>
+        </device-arrival>
+        """
+        #expect(DeviceXML.parseArrival(xml) == nil)
     }
 }

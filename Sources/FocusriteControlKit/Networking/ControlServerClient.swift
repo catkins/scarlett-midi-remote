@@ -119,9 +119,6 @@ public final class ControlServerClient: ControlServerClientProtocol {
         }
     }
     
-    public func setMonitorLeftDb(_ value: Double) { setMonitorDb(value) }
-    public func setMonitorRightDb(_ value: Double) { setMonitorDb(value) }
-    
     public func setOutputGain(id: String, db: Double) {
         queue.async { [weak self] in
             guard let self else { return }
@@ -209,28 +206,19 @@ public final class ControlServerClient: ControlServerClientProtocol {
         idSelector: (MixStripIDs) -> String,
         value: () -> String
     ) -> [(String, String)] {
-        guard let left = MixerLayout.leftMix(forMixId: mixId, in: model.mixes),
-              let leftIndex = model.mixes.firstIndex(where: { $0.id == left.id }) else { return [] }
-        let stereo = model.mixerSlots.indices.contains(slotIndex) && model.mixerSlots[slotIndex].stereo
-        let slotIndices = MixerLayout.writeSlotIndices(
+        let targets = MixerLayout.writeTargets(
+            mixId: mixId,
             slotIndex: slotIndex,
-            stereo: stereo,
-            stripCount: model.mixes[leftIndex].strips.count
+            mixes: model.mixes,
+            slots: model.mixerSlots
         )
-        var mixIndices = [leftIndex]
-        if let partner = MixerLayout.partnerMix(for: model.mixes[leftIndex], in: model.mixes),
-           let partnerIndex = model.mixes.firstIndex(where: { $0.id == partner.id }) {
-            mixIndices.append(partnerIndex)
-        }
         var items: [(String, String)] = []
         let formatted = value()
-        for mixIndex in mixIndices {
-            for slot in slotIndices where model.mixes[mixIndex].strips.indices.contains(slot) {
-                update(&model.mixes[mixIndex].strips[slot])
-                let id = idSelector(model.mixes[mixIndex].stripIDs[slot])
-                if !id.isEmpty {
-                    items.append((id, formatted))
-                }
+        for target in targets {
+            update(&model.mixes[target.mixIndex].strips[target.slotIndex])
+            let id = idSelector(model.mixes[target.mixIndex].stripIDs[target.slotIndex])
+            if !id.isEmpty {
+                items.append((id, formatted))
             }
         }
         return items
@@ -394,15 +382,19 @@ public final class ControlServerClient: ControlServerClientProtocol {
             if let until = suppressInboundUntil[item.id], now < until {
                 continue
             }
-            if meterParamIds.contains(item.id), let db = Double(item.value) {
-                let quantized = (db * 2).rounded() / 2
-                if meters[item.id] != quantized {
-                    meters[item.id] = quantized
-                    metersChanged = true
-                }
-                continue
+            switch MixerLayout.applyMeterItem(
+                id: item.id,
+                value: item.value,
+                meterIds: meterParamIds,
+                meters: &meters
+            ) {
+            case .ignored:
+                mixerItems.append(item)
+            case .unchanged:
+                break
+            case .updated:
+                metersChanged = true
             }
-            mixerItems.append(item)
         }
         if metersChanged {
             scheduleMeterFlush()
@@ -436,7 +428,7 @@ public final class ControlServerClient: ControlServerClientProtocol {
             return
         }
         if item.id == parameters.hardwareMuteId {
-            model.monitorMute = item.value == "true" || item.value == "1"
+            model.monitorMute = DeviceXML.isTruthy(item.value)
             return
         }
         applyChannelItem(item, to: &model.outputs)
@@ -450,7 +442,7 @@ public final class ControlServerClient: ControlServerClientProtocol {
             if model.mixerSlots[i].sourceParamId == item.id {
                 model.mixerSlots[i].sourceNodeId = item.value
             } else if model.mixerSlots[i].stereoParamId == item.id {
-                model.mixerSlots[i].stereo = item.value == "true" || item.value == "1"
+                model.mixerSlots[i].stereo = DeviceXML.isTruthy(item.value)
             }
         }
         for i in model.outputs.indices {
@@ -466,9 +458,9 @@ public final class ControlServerClient: ControlServerClientProtocol {
                 } else if ids.panId == item.id, let pan = Double(item.value) {
                     model.mixes[i].strips[j].pan = pan
                 } else if ids.muteId == item.id {
-                    model.mixes[i].strips[j].muted = item.value == "true" || item.value == "1"
+                    model.mixes[i].strips[j].muted = DeviceXML.isTruthy(item.value)
                 } else if ids.soloId == item.id {
-                    model.mixes[i].strips[j].solo = item.value == "true" || item.value == "1"
+                    model.mixes[i].strips[j].solo = DeviceXML.isTruthy(item.value)
                 }
             }
         }
@@ -485,11 +477,11 @@ public final class ControlServerClient: ControlServerClientProtocol {
             if channels[i].gainId == item.id, let db = Double(item.value) {
                 channels[i].gainDb = db
             } else if channels[i].muteId == item.id {
-                channels[i].muted = item.value == "true" || item.value == "1"
+                channels[i].muted = DeviceXML.isTruthy(item.value)
             } else if channels[i].availableId == item.id {
-                channels[i].available = item.value == "true" || item.value == "1"
+                channels[i].available = DeviceXML.isTruthy(item.value)
             } else if channels[i].stereoId == item.id {
-                channels[i].stereoLinked = item.value == "true" || item.value == "1"
+                channels[i].stereoLinked = DeviceXML.isTruthy(item.value)
             } else if channels[i].nicknameId == item.id {
                 channels[i].nickname = item.value
             }

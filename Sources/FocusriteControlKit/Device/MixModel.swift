@@ -1,5 +1,10 @@
 import Foundation
 
+func mixerDisplayName(nickname: String, factoryName: String) -> String {
+    let nick = nickname.trimmingCharacters(in: .whitespaces)
+    return nick.isEmpty ? factoryName : nick
+}
+
 public struct MixSourceNode: Identifiable, Equatable {
     public var id: String
     public var kind: String
@@ -10,8 +15,7 @@ public struct MixSourceNode: Identifiable, Equatable {
     public var meterParamId: String?
 
     public var displayName: String {
-        let nick = nickname.trimmingCharacters(in: .whitespaces)
-        return nick.isEmpty ? factoryName : nick
+        mixerDisplayName(nickname: nickname, factoryName: factoryName)
     }
 
     public init(id: String,
@@ -318,7 +322,7 @@ public enum MixerLayout {
         mixes.first { $0.name == mix.name && $0.id != mix.id }
     }
 
-    /// Slot indices written for one fader: this slot, stereo partner, and matching slots on the R mix.
+    /// Slot indices written for one fader: this slot and, when linked, the next slot.
     public static func writeSlotIndices(slotIndex: Int, stereo: Bool, stripCount: Int) -> [Int] {
         var indices = [slotIndex]
         if stereo {
@@ -328,8 +332,72 @@ public enum MixerLayout {
         return indices
     }
 
+    /// Mix + slot pairs written for one strip fader/mute/solo, including the paired R mix.
+    public static func writeTargets(
+        mixId: String,
+        slotIndex: Int,
+        mixes: [MixState],
+        slots: [MixerSlotState]
+    ) -> [MixWriteTarget] {
+        guard let left = leftMix(forMixId: mixId, in: mixes),
+              let leftIndex = mixes.firstIndex(where: { $0.id == left.id }) else { return [] }
+        let stereo = slots.indices.contains(slotIndex) && slots[slotIndex].stereo
+        let slotIndices = writeSlotIndices(
+            slotIndex: slotIndex,
+            stereo: stereo,
+            stripCount: mixes[leftIndex].strips.count
+        )
+        var mixIndices = [leftIndex]
+        if let partner = partnerMix(for: mixes[leftIndex], in: mixes),
+           let partnerIndex = mixes.firstIndex(where: { $0.id == partner.id }) {
+            mixIndices.append(partnerIndex)
+        }
+        var targets: [MixWriteTarget] = []
+        for mixIndex in mixIndices {
+            for slot in slotIndices where mixes[mixIndex].strips.indices.contains(slot) {
+                targets.append(MixWriteTarget(mixIndex: mixIndex, slotIndex: slot))
+            }
+        }
+        return targets
+    }
+
     /// Compact VU fill 0...1. Live meters are dBFS; −128 is digital silence.
     public static func meterFill(db: Double, floor: Double = -60, ceiling: Double = 0) -> Double {
         min(max((db - floor) / (ceiling - floor), 0), 1)
     }
+
+    /// Snap meter dB to 0.5 so tiny server jitter does not republish.
+    public static func quantizeMeter(_ db: Double) -> Double {
+        (db * 2).rounded() / 2
+    }
+
+    /// Fast-path for inbound `<item>` values that are known meters.
+    public static func applyMeterItem(
+        id: String,
+        value: String,
+        meterIds: Set<String>,
+        meters: inout [String: Double]
+    ) -> MeterItemApply {
+        guard meterIds.contains(id), let db = Double(value) else { return .ignored }
+        let quantized = quantizeMeter(db)
+        if meters[id] == quantized { return .unchanged }
+        meters[id] = quantized
+        return .updated
+    }
+}
+
+public struct MixWriteTarget: Equatable {
+    public var mixIndex: Int
+    public var slotIndex: Int
+
+    public init(mixIndex: Int, slotIndex: Int) {
+        self.mixIndex = mixIndex
+        self.slotIndex = slotIndex
+    }
+}
+
+public enum MeterItemApply: Equatable {
+    case ignored
+    case unchanged
+    case updated
 }

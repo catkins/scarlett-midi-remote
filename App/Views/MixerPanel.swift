@@ -14,7 +14,6 @@ struct MixerDisplayState {
     var hardware: [VisibleMixStrip]
     var playback: [VisibleMixStrip]
     var canRefresh: Bool
-    var learnArmed: Bool
     var pendingLearnId: String?
     var mappedIds: Set<String>
     var masterGainTargetId: String

@@ -30,8 +30,7 @@ public struct DeviceChannel: Identifiable, Equatable {
     public var meterParamId: String?
 
     public var displayName: String {
-        let nick = nickname.trimmingCharacters(in: .whitespaces)
-        return nick.isEmpty ? factoryName : nick
+        mixerDisplayName(nickname: nickname, factoryName: factoryName)
     }
 
     public init(id: String,
@@ -125,7 +124,7 @@ public enum DeviceXML {
         guard xml.contains("<approval") else { return nil }
         if let value = attribute(named: "authorised", in: xml, element: "approval")
             ?? attribute(named: "authorized", in: xml, element: "approval") {
-            return value == "true" || value == "1"
+            return isTruthy(value)
         }
         return nil
     }
@@ -153,6 +152,10 @@ public enum DeviceXML {
 
     public static func subscribeMessage(deviceId: String) -> String {
         "<device-subscribe devid=\"\(deviceId)\" subscribe=\"true\"/>"
+    }
+
+    public static func isTruthy(_ value: String) -> Bool {
+        value == "true" || value == "1"
     }
 
     static func attribute(named name: String, in xml: String, element: String) -> String? {
@@ -351,7 +354,6 @@ private final class DeviceArrivalParser: NSObject, XMLParserDelegate {
 
     private func finishMixStrip() {
         guard let gainId = pendingMixGainId else { return }
-        map.mixes.last.map { _ in }
         pendingMixStrips.append(
             MixStripIDs(
                 gainId: gainId,

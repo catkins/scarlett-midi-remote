@@ -159,8 +159,6 @@ extension ConnectionState {
         }
     }
 
-    var description: String { shortTitle }
-
     var color: Color {
         switch self {
         case .disconnected, .error: return .red

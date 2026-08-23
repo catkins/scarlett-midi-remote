@@ -103,7 +103,6 @@ final class DeviceViewModel: ObservableObject {
             hardware: mixStrips.filter { $0.kind != "playback" },
             playback: mixStrips.filter { $0.kind == "playback" },
             canRefresh: canRefresh,
-            learnArmed: appState.midiLearnEnabled,
             pendingLearnId: appState.pendingLearnTargetId,
             mappedIds: Set(appState.mappings.compactMap { $0.binding == nil ? nil : $0.id }),
             masterGainTargetId: MidiTarget.masterGain(for: kind).id,
