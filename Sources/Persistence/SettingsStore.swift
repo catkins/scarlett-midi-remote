@@ -6,7 +6,9 @@ public protocol SettingsStoreProtocol: AnyObject, SettingsStoring {
 }
 
 public protocol SettingsStoring: AnyObject {
-    var selectedMidiInputName: String? { get set }
+    var selectedMidiInputUID: Int32? { get set }
+    var clientName: String { get set }
+    var autoReconnect: Bool { get set }
 }
 
 public final class SettingsStore: SettingsStoreProtocol {
@@ -16,9 +18,28 @@ public final class SettingsStore: SettingsStoreProtocol {
     
     public init() {}
     
-    public var selectedMidiInputName: String? {
-        get { userDefaults.string(forKey: "selectedMidiInputName") }
-        set { userDefaults.set(newValue, forKey: "selectedMidiInputName") }
+    public var selectedMidiInputUID: Int32? {
+        get {
+            let value = userDefaults.integer(forKey: "selectedMidiInputUID")
+            return value == 0 ? nil : Int32(value)
+        }
+        set {
+            if let v = newValue {
+                userDefaults.set(Int(v), forKey: "selectedMidiInputUID")
+            } else {
+                userDefaults.removeObject(forKey: "selectedMidiInputUID")
+            }
+        }
+    }
+    
+    public var clientName: String {
+        get { userDefaults.string(forKey: "clientName") ?? "Scarlett MIDI Control" }
+        set { userDefaults.set(newValue, forKey: "clientName") }
+    }
+    
+    public var autoReconnect: Bool {
+        get { userDefaults.object(forKey: "autoReconnect") as? Bool ?? true }
+        set { userDefaults.set(newValue, forKey: "autoReconnect") }
     }
     
     public func saveMappings<T: Encodable>(_ items: T) {

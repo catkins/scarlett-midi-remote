@@ -28,11 +28,18 @@ public final class ControlServerClient: ControlServerClientProtocol {
     private var keepAliveTimer: Timer?
     private let framing = ProtocolFraming()
     private var inboundBuffer = Data()
+    private var lastServer: DiscoveredServer?
+    private var reconnectWorkItem: DispatchWorkItem?
+    
+    // Configurable settings (bound from app Settings)
+    public var clientName: String = "Scarlett MIDI Control"
+    public var autoReconnect: Bool = true
     
     public init() {}
     
     public func connect(to server: DiscoveredServer) {
         stateSubject.send(.connecting)
+        lastServer = server
         let params = NWParameters.tcp
         let endpoint = NWEndpoint.Host(server.host)
         let port = NWEndpoint.Port(rawValue: server.port) ?? .init(integerLiteral: 49152)
@@ -47,8 +54,10 @@ public final class ControlServerClient: ControlServerClientProtocol {
                 self?.startKeepAlive()
             case .failed(let error):
                 self?.stateSubject.send(.error(error.localizedDescription))
+                self?.scheduleReconnect()
             case .waiting(let error):
                 self?.stateSubject.send(.error(error.localizedDescription))
+                self?.scheduleReconnect()
             default:
                 break
             }
@@ -103,7 +112,8 @@ public final class ControlServerClient: ControlServerClientProtocol {
     
     private func sendClientHello() {
         // UNVERIFIED placeholder hello; real implementation must match the classic client fields
-        let hello = "<client-details name=\"Scarlett MIDI Control\" key=\"swiftui\"/>"
+        let safeName = clientName.replacingOccurrences(of: "\"", with: "'")
+        let hello = "<client-details name=\"\(safeName)\" key=\"swiftui\"/>"
         sendXML(hello)
     }
     
@@ -124,6 +134,18 @@ public final class ControlServerClient: ControlServerClientProtocol {
         guard let conn = connection else { return }
         let data = framing.encode(xml: xml)
         conn.send(content: data, completion: .contentProcessed { _ in })
+    }
+    
+    private func scheduleReconnect() {
+        guard autoReconnect, let server = lastServer else { return }
+        reconnectWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if case .connected = self.stateSubject.value { return }
+            self.connect(to: server)
+        }
+        reconnectWorkItem = item
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2.0, execute: item)
     }
 }
 

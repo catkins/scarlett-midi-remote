@@ -3,9 +3,22 @@ import CoreMIDI
 
 public protocol MidiManagerProtocol {
     var onLearnedMessage: ((MidiMessage) -> Void)? { get set }
+    func availableInputs() -> [MidiInputInfo]
+    func selectInput(uid: Int32)
+    // Back-compat helpers (optional)
     func availableInputNames() -> [String]
     func selectInput(named name: String)
     func setLearningEnabled(_ enabled: Bool)
+}
+
+public struct MidiInputInfo: Codable, Equatable, Hashable {
+    public let uid: Int32
+    public let name: String
+    
+    public init(uid: Int32, name: String) {
+        self.uid = uid
+        self.name = name
+    }
 }
 
 public struct MidiMessage: Codable, Equatable {
@@ -37,6 +50,7 @@ public final class MidiManager: NSObject, MidiManagerProtocol {
     private var client = MIDIClientRef()
     private var inputPort = MIDIPortRef()
     private var selectedSource: MIDIEndpointRef?
+    private var selectedSourceUID: Int32?
     private var learningEnabled = false
     private let settingsStore: SettingsStoring
     
@@ -54,29 +68,40 @@ public final class MidiManager: NSObject, MidiManagerProtocol {
         if client != 0 { MIDIClientDispose(client) }
     }
     
-    public func availableInputNames() -> [String] {
+    public func availableInputs() -> [MidiInputInfo] {
         let count = MIDIGetNumberOfSources()
-        var names: [String] = []
+        var inputs: [MidiInputInfo] = []
         for i in 0..<count {
             let src = MIDIGetSource(i)
-            names.append(endpointName(src))
+            inputs.append(MidiInputInfo(uid: endpointUID(src), name: endpointName(src)))
         }
-        return names
+        return inputs
     }
     
-    public func selectInput(named name: String) {
+    public func availableInputNames() -> [String] {
+        availableInputs().map { $0.name }
+    }
+    
+    public func selectInput(uid: Int32) {
         let count = MIDIGetNumberOfSources()
         for i in 0..<count {
             let src = MIDIGetSource(i)
-            if endpointName(src) == name {
+            if endpointUID(src) == uid {
                 if let selected = selectedSource {
                     MIDIPortDisconnectSource(inputPort, selected)
                 }
                 MIDIPortConnectSource(inputPort, src, nil)
                 selectedSource = src
-                settingsStore.selectedMidiInputName = name
+                selectedSourceUID = uid
+                settingsStore.selectedMidiInputUID = uid
                 break
             }
+        }
+    }
+    
+    public func selectInput(named name: String) {
+        if let match = availableInputs().first(where: { $0.name == name }) {
+            selectInput(uid: match.uid)
         }
     }
     
@@ -92,6 +117,15 @@ public final class MidiManager: NSObject, MidiManagerProtocol {
             name = take as String
         }
         return name
+    }
+    
+    private func endpointUID(_ endpoint: MIDIObjectRef) -> Int32 {
+        var value: Int32 = 0
+        let status = MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyUniqueID, &value)
+        if status == noErr {
+            return value
+        }
+        return -1
     }
     
     private let midiReadProc: MIDIReadProc = { packetList, srcConnRefCon, _ in

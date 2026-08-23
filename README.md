@@ -1,6 +1,6 @@
-## Scarlett MIDI Control (macOS)
+## Scarlett MIDI Control (macOS Menu Bar)
 
-Control your Focusrite Scarlett 18i20 (2nd Gen) hardware mixer and monitor levels from a MIDI controller. This macOS app discovers and talks to the local Focusrite Control server (the classic one used by the original iOS remote), letting you map MIDI CC/notes to common controls like Monitor volume and Mute.
+Control your Focusrite Scarlett 18i20 (2nd Gen) hardware mixer and monitor levels from a MIDI controller. This macOS menu bar app discovers and talks to the local Focusrite Control server (the classic one used by the original iOS remote), letting you map MIDI CC/notes to common controls like Monitor volume and Mute.
 
 Status: MVP scaffold. Networking and protocol framing are implemented as stubs with clear TODOs and references. The UI, MIDI I/O, and persistence are ready to be wired up once the protocol is verified live against a running server.
 
@@ -14,7 +14,7 @@ Status: MVP scaffold. Networking and protocol framing are implemented as stubs w
 
 ---
 
-## Architecture
+## Architecture (menu bar app)
 
 - `FocusriteControlKit` (framework)
   - `DiscoveryService`: UDP discovery stub that models iOS client behavior (broadcast to 30096..30098). Replace stub with real UDP once you can capture replies on your Mac.
@@ -22,11 +22,13 @@ Status: MVP scaffold. Networking and protocol framing are implemented as stubs w
   - `ProtocolFraming`: Encodes/decodes the classic `Length=<hex>` framing that wraps XML payloads. Footer handling is permissive during bring-up.
   - `Scarlett18i20Gen2Model`: Simple device model (monitor L/R dB, mute).
 - `MidiKit` (framework)
-  - `MidiManager`: CoreMIDI input from a single selected port; "MIDI learn" callback captures CC/Note events. No "listen-to-all" pitfalls.
+  - `MidiManager`: CoreMIDI input from a single selected port (by UID); "MIDI learn" callback captures CC/Note events. No "listen-to-all" pitfalls.
 - `PersistenceKit` (framework)
-  - `SettingsStore`: UserDefaults for selected MIDI input + JSON file in Application Support for mappings.
-- SwiftUI App
-  - Clear connection state (discover, connect, approval), basic monitor controls, and a MIDI Learn view to map CC/notes.
+  - `SettingsStore`: UserDefaults (`@AppStorage`) for client name, auto-reconnect, selected MIDI input UID + JSON file in Application Support for mappings.
+- SwiftUI Menu Bar App (`MenuBarExtra`)
+  - Menu bar icon reflects connection state (disconnected / awaiting approval / connected)
+  - Popover shows connection status, MIDI source picker (single selected port), primary monitor/mute controls, and per-control Learn buttons
+  - Optional "Open Full Panel" stub for expanded mix strips later
 
 ---
 
@@ -52,7 +54,7 @@ This app ships stubs for steps 1–4. See `docs/PROTOCOL.md` for message framing
 ## Building locally (macOS)
 
 Prereqs:
-- macOS 12+ (Apple Silicon or Intel)
+- macOS 13+ (Apple Silicon or Intel)
 - Xcode 14+ (or newer)
 - Classic Focusrite Control installed (not Control 2), so `FocusriteControlServer` runs locally
 - Homebrew (for XcodeGen), optional but recommended
@@ -64,9 +66,12 @@ Steps:
    xcodegen generate
    open ScarlettMidiControl.xcodeproj
    ```
-2. In Xcode, select the "ScarlettMidiControl" scheme and build/run.
-3. With Focusrite Control open (or at least the server running), click Discover then Connect. Approve the client inside Focusrite Control when prompted.
-4. Choose your MIDI input device, enable MIDI Learn, and move a control to map it. Mappings persist between launches.
+2. In Xcode, select the "ScarlettMidiControl" scheme and build/run. The app appears as a menu bar icon.
+3. Popover flow:
+   - Connection: Discover → Connect → approve the client in Focusrite Control when prompted.
+   - MIDI source: Pick exactly one MIDI input port (by name; bound by UID under the hood).
+   - Learn: Click Learn next to a control, move a knob (CC preferred) on the selected port; mapping saves automatically (UID + channel + type + number).
+   - Clear: Use Clear to unmap a control.
 
 Notes:
 - If hardware isn't detected, quitting and relaunching the Focusrite Control app (which restarts its server) often helps.
@@ -77,9 +82,9 @@ Notes:
 ## What’s implemented vs TODO
 
 Implemented:
-- SwiftUI app shell with Connection, Device, and MIDI Mapping sections
-- CoreMIDI input from a single selected port; MIDI Learn callback
-- Persistence for selected input + mappings (JSON in Application Support)
+- SwiftUI menu bar UI: connection status, MIDI picker, primary controls, per-control Learn/Clear
+- CoreMIDI input from a single selected port (UID-based); MIDI Learn callback
+- Persistence for selected MIDI port UID and mappings (JSON in Application Support)
 - Protocol framing helpers (encode/decode `Length=<hex>` frames)
 
 TODO (verify against live server):

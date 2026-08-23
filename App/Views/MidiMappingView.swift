@@ -9,31 +9,30 @@ struct MidiMappingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Picker("MIDI Input", selection: $viewModel.selectedInputName) {
-                    ForEach(viewModel.availableInputs, id: \.self) { name in
-                        Text(name).tag(Optional(name))
+                Picker("MIDI Input", selection: $viewModel.selectedInputUID) {
+                    Text("None").tag(Optional<Int32>.none)
+                    ForEach(viewModel.availableInputs, id: \.uid) { info in
+                        Text(info.name).tag(Optional(info.uid))
                     }
                 }
-                .frame(maxWidth: 320)
+                .frame(maxWidth: 280)
                 Button("Refresh") { viewModel.refreshInputs() }
                 Spacer()
-                Toggle("MIDI Learn", isOn: $viewModel.isLearning)
+                if let armedId = viewModel.armedControlId {
+                    Text("Learning \(armedId)…").foregroundColor(.orange)
+                    Button("Cancel") { viewModel.cancelLearning() }
+                }
             }
-            .onChange(of: viewModel.selectedInputName) { _, newValue in
-                viewModel.selectInput(named: newValue)
+            .onChange(of: viewModel.selectedInputUID) { _, newValue in
+                viewModel.selectInput(uid: newValue)
             }
             
-            List {
+            VStack(alignment: .leading, spacing: 8) {
                 ForEach(viewModel.mappings, id: \.id) { mapping in
-                    HStack {
-                        Text(mapping.controlName)
-                        Spacer()
-                        Text(mapping.midiDescription)
-                            .foregroundColor(.secondary)
-                        Button("Clear") {
-                            viewModel.clear(mapping: mapping)
-                        }
-                    }
+                    MappingRow(mapping: mapping,
+                               isArmed: viewModel.armedControlId == mapping.id,
+                               onLearn: { viewModel.armLearn(for: mapping.id) },
+                               onClear: { viewModel.clear(mapping: mapping) })
                 }
             }
         }
@@ -44,12 +43,32 @@ struct MidiMappingView: View {
     }
 }
 
-final class MidiMappingViewModel: ObservableObject {
-    @Published var availableInputs: [String] = []
-    @Published var selectedInputName: String?
-    @Published var isLearning: Bool = false {
-        didSet { midiManager?.setLearningEnabled(isLearning) }
+private struct MappingRow: View {
+    let mapping: MidiMappingItem
+    let isArmed: Bool
+    let onLearn: () -> Void
+    let onClear: () -> Void
+    
+    var body: some View {
+        HStack {
+            Text(mapping.controlName)
+            Spacer()
+            Text(mapping.bindingDescription)
+                .foregroundColor(.secondary)
+            if isArmed {
+                Text("Learning…").foregroundColor(.orange)
+            } else {
+                Button("Learn") { onLearn() }
+            }
+            Button("Clear") { onClear() }
+        }
     }
+}
+
+final class MidiMappingViewModel: ObservableObject {
+    @Published var availableInputs: [MidiInputInfo] = []
+    @Published var selectedInputUID: Int32?
+    @Published var armedControlId: String?
     @Published var mappings: [MidiMappingItem] = MidiMappingItem.defaultItems
     
     private var midiManager: MidiManagerProtocol?
@@ -59,54 +78,85 @@ final class MidiMappingViewModel: ObservableObject {
         midiManager = appState.midiManager
         settings = appState.settingsStore
         refreshInputs()
-        selectedInputName = settings?.selectedMidiInputName
-        if let name = selectedInputName {
-            midiManager?.selectInput(named: name)
+        selectedInputUID = settings?.selectedMidiInputUID
+        if let uid = selectedInputUID {
+            midiManager?.selectInput(uid: uid)
         }
         midiManager?.onLearnedMessage = { [weak self] message in
             guard let self else { return }
-            // For MVP: always map to the first unmapped item
-            if let idx = self.mappings.firstIndex(where: { $0.midiMessage == nil }) {
-                self.mappings[idx].midiMessage = message
-                self.settings?.saveMappings(self.mappings)
-            }
+            // Prefer Control Change for MVP
+            guard message.kind == .controlChange else { return }
+            guard let controlId = self.armedControlId,
+                  let uid = self.selectedInputUID,
+                  let idx = self.mappings.firstIndex(where: { $0.id == controlId }) else { return }
+            self.mappings[idx].binding = MidiBinding(portUID: uid,
+                                                     channel: message.channel,
+                                                     type: .cc,
+                                                     number: message.data1)
+            self.settings?.saveMappings(self.mappings)
+            self.armedControlId = nil
+            self.midiManager?.setLearningEnabled(false)
         }
         self.mappings = settings?.loadMappings() ?? MidiMappingItem.defaultItems
     }
     
-    func refreshInputs() {
-        availableInputs = midiManager?.availableInputNames() ?? []
+    func armLearn(for controlId: String) {
+        armedControlId = controlId
+        midiManager?.setLearningEnabled(true)
     }
     
-    func selectInput(named name: String?) {
-        guard let name else { return }
-        midiManager?.selectInput(named: name)
-        settings?.selectedMidiInputName = name
+    func cancelLearning() {
+        armedControlId = nil
+        midiManager?.setLearningEnabled(false)
+    }
+    
+    func refreshInputs() {
+        availableInputs = midiManager?.availableInputs() ?? []
+    }
+    
+    func selectInput(uid: Int32?) {
+        guard let uid else { return }
+        midiManager?.selectInput(uid: uid)
+        settings?.selectedMidiInputUID = uid
     }
     
     func clear(mapping: MidiMappingItem) {
         guard let idx = mappings.firstIndex(where: { $0.id == mapping.id }) else { return }
-        mappings[idx].midiMessage = nil
+        mappings[idx].binding = nil
         settings?.saveMappings(mappings)
     }
+}
+
+struct MidiBinding: Identifiable, Codable, Equatable {
+    enum MessageType: String, Codable { case cc, noteOn, noteOff, pitchBend }
+    var id: String { "\(portUID)-\(channel)-\(type)-\(number)" }
+    let portUID: Int32
+    let channel: UInt8
+    let type: MessageType
+    let number: UInt8
 }
 
 struct MidiMappingItem: Identifiable, Codable {
     let id: String
     let controlName: String
-    var midiMessage: MidiMessage?
+    var binding: MidiBinding?
     
-    var midiDescription: String {
-        if let msg = midiMessage {
-            return msg.shortDescription
+    var bindingDescription: String {
+        if let b = binding {
+            switch b.type {
+            case .cc: return "Port \(b.portUID) CC ch\(b.channel+1) #\(b.number)"
+            case .noteOn: return "Port \(b.portUID) NoteOn ch\(b.channel+1) #\(b.number)"
+            case .noteOff: return "Port \(b.portUID) NoteOff ch\(b.channel+1) #\(b.number)"
+            case .pitchBend: return "Port \(b.portUID) PitchBend ch\(b.channel+1)"
+            }
         }
         return "Unmapped"
     }
     
     static var defaultItems: [MidiMappingItem] = [
-        MidiMappingItem(id: "monitorL", controlName: "Monitor L", midiMessage: nil),
-        MidiMappingItem(id: "monitorR", controlName: "Monitor R", midiMessage: nil),
-        MidiMappingItem(id: "mute", controlName: "Mute", midiMessage: nil)
+        MidiMappingItem(id: "monitorL", controlName: "Monitor L", binding: nil),
+        MidiMappingItem(id: "monitorR", controlName: "Monitor R", binding: nil),
+        MidiMappingItem(id: "mute", controlName: "Mute", binding: nil)
     ]
 }
 
