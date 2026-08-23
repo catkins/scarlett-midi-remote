@@ -27,6 +27,7 @@ public struct DeviceChannel: Identifiable, Equatable {
     /// Output `source` parameter id whose value is the assigned mix id.
     public var sourceParamId: String?
     public var assignedMixId: String
+    public var meterParamId: String?
 
     public var displayName: String {
         let nick = nickname.trimmingCharacters(in: .whitespaces)
@@ -51,7 +52,8 @@ public struct DeviceChannel: Identifiable, Equatable {
                 gainId: String? = nil,
                 elementId: String? = nil,
                 sourceParamId: String? = nil,
-                assignedMixId: String = "") {
+                assignedMixId: String = "",
+                meterParamId: String? = nil) {
         self.id = id
         self.role = role
         self.kind = kind
@@ -71,6 +73,7 @@ public struct DeviceChannel: Identifiable, Equatable {
         self.elementId = elementId
         self.sourceParamId = sourceParamId
         self.assignedMixId = assignedMixId
+        self.meterParamId = meterParamId
     }
 }
 
@@ -87,6 +90,20 @@ public struct DeviceParameterMap: Equatable {
     public var mixerSlots: [MixerSlotDescriptor] = []
     public var mixes: [MixDescriptor] = []
     public var sourceNodes: [MixSourceNode] = []
+
+    public var meterParamIds: Set<String> {
+        var ids = Set<String>()
+        for node in sourceNodes {
+            if let id = node.meterParamId, !id.isEmpty { ids.insert(id) }
+        }
+        for channel in outputs {
+            if let id = channel.meterParamId, !id.isEmpty { ids.insert(id) }
+        }
+        for mix in mixes where !mix.meterParamId.isEmpty {
+            ids.insert(mix.meterParamId)
+        }
+        return ids
+    }
 
     public var gainRange: ClosedRange<Double> {
         min(minGainDb, maxGainDb)...max(minGainDb, maxGainDb)
@@ -117,15 +134,17 @@ public enum DeviceXML {
         guard xml.contains("<set") else { return nil }
         let deviceId = attribute(named: "devid", in: xml, element: "set") ?? ""
         var items: [(String, String)] = []
-        let pattern = #"<item\s+id="([^"]+)"\s+value="([^"]*)"\s*/>"#
-        if let regex = try? NSRegularExpression(pattern: pattern) {
-            let ns = xml as NSString
-            for match in regex.matches(in: xml, range: NSRange(location: 0, length: ns.length)) {
-                items.append((ns.substring(with: match.range(at: 1)), ns.substring(with: match.range(at: 2))))
-            }
+        let ns = xml as NSString
+        for match in setItemRegex.matches(in: xml, range: NSRange(location: 0, length: ns.length)) {
+            items.append((ns.substring(with: match.range(at: 1)), ns.substring(with: match.range(at: 2))))
         }
         return (deviceId, items)
     }
+
+    private static let setItemRegex: NSRegularExpression = {
+        // swiftlint:disable:next force_try
+        try! NSRegularExpression(pattern: #"<item\s+id="([^"]+)"\s+value="([^"]*)"\s*/>"#)
+    }()
 
     public static func setMessage(deviceId: String, items: [(id: String, value: String)]) -> String {
         let body = items.map { "<item id=\"\($0.id)\" value=\"\($0.value)\"/>" }.joined()
@@ -161,6 +180,8 @@ private final class DeviceArrivalParser: NSObject, XMLParserDelegate {
     private var pendingMuteId: String?
     private var pendingGainId: String?
     private var pendingSourceParamId: String?
+    private var pendingMeterId: String?
+    private var pendingMixMeterId: String?
 
     private var pendingMixerSourceParamId: String?
     private var pendingMixerStereoParamId: String?
@@ -209,6 +230,15 @@ private final class DeviceArrivalParser: NSObject, XMLParserDelegate {
                 pendingMixName = attributes["name"] ?? ""
                 pendingMixStereoName = attributes["stereo-name"] ?? ""
                 pendingMixStrips = []
+                pendingMixMeterId = nil
+            }
+        case "meter":
+            if let id = attributes["id"] {
+                if path.contains("mixes"), path.contains("mix"), !path.contains("input") {
+                    pendingMixMeterId = id
+                } else {
+                    pendingMeterId = id
+                }
             }
         case "input":
             if isMixerSlotPath {
@@ -309,6 +339,7 @@ private final class DeviceArrivalParser: NSObject, XMLParserDelegate {
         pendingMuteId = nil
         pendingGainId = nil
         pendingSourceParamId = nil
+        pendingMeterId = nil
     }
 
     private func finishMixerSlot() {
@@ -342,13 +373,15 @@ private final class DeviceArrivalParser: NSObject, XMLParserDelegate {
                 id: pendingMixId,
                 name: pendingMixName,
                 stereoName: pendingMixStereoName,
-                strips: pendingMixStrips
+                strips: pendingMixStrips,
+                meterParamId: pendingMixMeterId ?? ""
             )
         )
         pendingMixId = ""
         pendingMixName = ""
         pendingMixStereoName = ""
         pendingMixStrips = []
+        pendingMixMeterId = nil
     }
 
     private func finishPendingChannel() {
@@ -359,7 +392,8 @@ private final class DeviceArrivalParser: NSObject, XMLParserDelegate {
                     kind: pendingKind,
                     factoryName: pendingName,
                     stereoName: pendingStereoName,
-                    nicknameId: pendingNicknameId
+                    nicknameId: pendingNicknameId,
+                    meterParamId: pendingMeterId
                 )
             )
         }
@@ -383,7 +417,8 @@ private final class DeviceArrivalParser: NSObject, XMLParserDelegate {
             muteId: pendingMuteId,
             gainId: pendingGainId,
             elementId: pendingElementId,
-            sourceParamId: pendingSourceParamId
+            sourceParamId: pendingSourceParamId,
+            meterParamId: pendingMeterId
         )
         if isOutput {
             map.outputs.append(channel)

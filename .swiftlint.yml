@@ -33,6 +33,7 @@ disabled_rules:
   - implicitly_unwrapped_optional
   - for_where
   - optional_data_string_conversion
+  - inclusive_language
 
 opt_in_rules:
   - empty_count

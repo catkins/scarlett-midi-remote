@@ -1,109 +1,58 @@
 import SwiftUI
 import Combine
 import FocusriteControlKit
+import MidiKit
 
 struct DeviceView: View {
     @StateObject private var viewModel = DeviceViewModel()
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(viewModel.deviceModel)
+        VStack(alignment: .leading, spacing: 8) {
+            if appState.midiLearnEnabled {
+                Text(appState.pendingLearnTargetId == nil
+                     ? "MIDI Learn — click a fader, mute, or solo, then move a knob."
+                     : "Move a knob to map \(appState.pendingLearnName).")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer()
-                Button {
-                    viewModel.requestSnapshot()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .disabled(!viewModel.canRefresh)
-                .help("Refresh device snapshot")
+                    .foregroundStyle(appState.highlightSwatch.color)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            if viewModel.visibleOutputs.isEmpty {
-                Text("No outputs to show. Enable some in Settings.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Picker("Output", selection: $viewModel.selectedOutputId) {
-                    ForEach(viewModel.visibleOutputs) { pair in
-                        Text(pair.title).tag(pair.id)
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .onChange(of: viewModel.selectedOutputId) { _, _ in
+            MixerPanel(
+                state: viewModel.displayState(appState: appState),
+                masterDb: $viewModel.masterDb,
+                onSelectOutput: { id in
+                    viewModel.selectedOutputId = id
                     viewModel.outputSelectionChanged()
+                },
+                onRefresh: { viewModel.requestSnapshot() },
+                onMasterEditing: { editing in
+                    viewModel.masterSliderChanged(editing: editing)
+                },
+                onMasterMute: { muted in
+                    viewModel.masterMute = muted
+                    viewModel.userChangedMasterMute(muted)
+                },
+                onLearn: { id, name in
+                    appState.beginMidiLearn(targetId: id, name: name)
+                },
+                onStripGain: { strip, db in
+                    viewModel.setMixGain(strip: strip, db: db)
+                },
+                onStripMute: { strip, muted in
+                    viewModel.setMixMute(strip: strip, muted: muted)
+                },
+                onStripSolo: { strip, solo in
+                    viewModel.setMixSolo(strip: strip, solo: solo)
                 }
-
-                if viewModel.selectedOutput != nil {
-                    VolumeFader(value: $viewModel.masterDb, title: viewModel.selectedOutput?.isMonitor == true ? "Monitor" : "Level", range: viewModel.gainRange) { editing in
-                        viewModel.masterSliderChanged(editing: editing)
-                    }
-                    .onChange(of: viewModel.masterDb) { _, _ in
-                        viewModel.masterValueChanged()
-                    }
-
-                    Toggle("Mute", isOn: $viewModel.masterMute)
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .onChange(of: viewModel.masterMute) { _, newValue in
-                            viewModel.userChangedMasterMute(newValue)
-                        }
-                }
-            }
-
-            let hardware = viewModel.mixStrips.filter { $0.kind != "playback" }
-            let playback = viewModel.mixStrips.filter { $0.kind == "playback" }
-
-            if !hardware.isEmpty || !playback.isEmpty {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if !hardware.isEmpty {
-                            Text("Hardware inputs")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            ForEach(hardware) { strip in
-                                MixStripRow(strip: strip, range: viewModel.mixRange) { db in
-                                    viewModel.setMixGain(strip: strip, db: db)
-                                } onMute: { muted in
-                                    viewModel.setMixMute(strip: strip, muted: muted)
-                                } onSolo: { solo in
-                                    viewModel.setMixSolo(strip: strip, solo: solo)
-                                }
-                            }
-                        }
-                        if !playback.isEmpty {
-                            Text("Playback")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 4)
-                            ForEach(playback) { strip in
-                                MixStripRow(strip: strip, range: viewModel.mixRange) { db in
-                                    viewModel.setMixGain(strip: strip, db: db)
-                                } onMute: { muted in
-                                    viewModel.setMixMute(strip: strip, muted: muted)
-                                } onSolo: { solo in
-                                    viewModel.setMixSolo(strip: strip, solo: solo)
-                                }
-                            }
-                        }
-                    }
-                }
-                .frame(maxHeight: 280)
-            } else if viewModel.selectedOutput != nil {
-                Text("No sources assigned to this mix in Focusrite Control.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            )
+            .environmentObject(viewModel.meters)
+            .onChange(of: viewModel.masterDb) { _, _ in
+                viewModel.masterValueChanged()
             }
 
             if viewModel.showApprovalHint {
-                Text("Approve “Scarlett MIDI Control” in Focusrite Control → Settings → Remote Devices if faders don’t stick.")
+                Text("Approve this app in Focusrite Control → Settings → Remote Devices if faders don’t stick.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -112,96 +61,6 @@ struct DeviceView: View {
         .onAppear {
             viewModel.bind(appState: appState)
         }
-    }
-}
-
-struct VolumeFader: View {
-    @Binding var value: Double
-    let title: String
-    var range: ClosedRange<Double> = -80...10
-    var onEditingChanged: (Bool) -> Void = { _ in }
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .frame(width: 64, alignment: .leading)
-                .lineLimit(1)
-            Slider(value: $value, in: range, step: 0.5, onEditingChanged: onEditingChanged)
-            Text(String(format: "%5.1f dB", value))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 58, alignment: .trailing)
-        }
-    }
-}
-
-private struct MixStripRow: View {
-    let strip: VisibleMixStrip
-    let range: ClosedRange<Double>
-    let onGain: (Double) -> Void
-    let onMute: (Bool) -> Void
-    let onSolo: (Bool) -> Void
-    @State private var gain: Double = 0
-    @State private var muted = false
-    @State private var solo = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text(strip.title)
-                    .font(.caption)
-                    .lineLimit(1)
-                if strip.stereo {
-                    Image(systemName: "link")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .help("Stereo linked — one fader")
-                }
-                Spacer()
-                Button {
-                    muted.toggle()
-                    onMute(muted)
-                } label: {
-                    Text("M")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(muted ? Color.white : Color.secondary)
-                        .frame(width: 18, height: 18)
-                        .background(muted ? Color.red.opacity(0.85) : Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("Mute")
-                Button {
-                    solo.toggle()
-                    onSolo(solo)
-                } label: {
-                    Text("S")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(solo ? Color.white : Color.secondary)
-                        .frame(width: 18, height: 18)
-                        .background(solo ? Color.yellow.opacity(0.9) : Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("Solo")
-            }
-            HStack(spacing: 8) {
-                Slider(value: $gain, in: range, step: 0.5) { _ in
-                    onGain(gain)
-                }
-                Text(String(format: "%4.1f", gain))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .frame(width: 36, alignment: .trailing)
-            }
-        }
-        .onAppear {
-            gain = strip.gainDb
-            muted = strip.muted
-            solo = strip.solo
-        }
-        .onChange(of: strip.gainDb) { _, value in gain = value }
-        .onChange(of: strip.muted) { _, value in muted = value }
-        .onChange(of: strip.solo) { _, value in solo = value }
     }
 }
 
@@ -216,6 +75,7 @@ final class DeviceViewModel: ObservableObject {
     @Published var selectedOutputId: String = ""
     @Published var visibleOutputs: [OutputPair] = []
     @Published var mixStrips: [VisibleMixStrip] = []
+    let meters = MeterLevels()
 
     var selectedOutput: OutputPair? {
         visibleOutputs.first(where: { $0.id == selectedOutputId }) ?? visibleOutputs.first
@@ -227,6 +87,34 @@ final class DeviceViewModel: ObservableObject {
     private var latest = Scarlett18i20Gen2Model()
     private var cancellables = Set<AnyCancellable>()
 
+    func displayState(appState: AppState) -> MixerDisplayState {
+        let output = selectedOutput
+        let kind = MonitorKind(id: output?.id ?? "", isMonitor: output?.isMonitor ?? false)
+        let title = output?.title ?? "Level"
+        return MixerDisplayState(
+            deviceModel: deviceModel,
+            outputs: visibleOutputs,
+            selectedOutputId: selectedOutputId,
+            masterTitle: title,
+            masterDb: masterDb,
+            masterMute: masterMute,
+            gainRange: gainRange,
+            mixRange: mixRange,
+            hardware: mixStrips.filter { $0.kind != "playback" },
+            playback: mixStrips.filter { $0.kind == "playback" },
+            canRefresh: canRefresh,
+            learnArmed: appState.midiLearnEnabled,
+            pendingLearnId: appState.pendingLearnTargetId,
+            mappedIds: Set(appState.mappings.compactMap { $0.binding == nil ? nil : $0.id }),
+            masterGainTargetId: MidiTarget.masterGain(for: kind).id,
+            masterMuteTargetId: MidiTarget.masterMute(for: kind).id,
+            masterMeterIds: [output?.meterParamId].compactMap { id in
+                guard let id, !id.isEmpty else { return nil }
+                return id
+            }
+        )
+    }
+
     func bind(appState: AppState) {
         guard self.appState == nil else { return }
         self.appState = appState
@@ -235,6 +123,13 @@ final class DeviceViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] model in
                 self?.apply(model: model)
+            }
+            .store(in: &cancellables)
+
+        appState.controlClient.meterPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] values in
+                self?.meters.replace(values)
             }
             .store(in: &cancellables)
 

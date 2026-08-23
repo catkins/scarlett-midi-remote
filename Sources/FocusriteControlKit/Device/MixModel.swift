@@ -7,6 +7,7 @@ public struct MixSourceNode: Identifiable, Equatable {
     public var stereoName: String
     public var nickname: String
     public var nicknameId: String?
+    public var meterParamId: String?
 
     public var displayName: String {
         let nick = nickname.trimmingCharacters(in: .whitespaces)
@@ -18,13 +19,15 @@ public struct MixSourceNode: Identifiable, Equatable {
                 factoryName: String,
                 stereoName: String = "",
                 nickname: String = "",
-                nicknameId: String? = nil) {
+                nicknameId: String? = nil,
+                meterParamId: String? = nil) {
         self.id = id
         self.kind = kind
         self.factoryName = factoryName
         self.stereoName = stereoName
         self.nickname = nickname
         self.nicknameId = nicknameId
+        self.meterParamId = meterParamId
     }
 }
 
@@ -57,12 +60,14 @@ public struct MixDescriptor: Identifiable, Equatable {
     public var name: String
     public var stereoName: String
     public var strips: [MixStripIDs]
+    public var meterParamId: String
 
-    public init(id: String, name: String, stereoName: String, strips: [MixStripIDs]) {
+    public init(id: String, name: String, stereoName: String, strips: [MixStripIDs], meterParamId: String = "") {
         self.id = id
         self.name = name
         self.stereoName = stereoName
         self.strips = strips
+        self.meterParamId = meterParamId
     }
 }
 
@@ -103,17 +108,20 @@ public struct MixState: Identifiable, Equatable {
     public var stereoName: String
     public var stripIDs: [MixStripIDs]
     public var strips: [MixStripState]
+    public var meterParamId: String
 
     public init(id: String,
                 name: String,
                 stereoName: String,
                 stripIDs: [MixStripIDs],
-                strips: [MixStripState]) {
+                strips: [MixStripState],
+                meterParamId: String = "") {
         self.id = id
         self.name = name
         self.stereoName = stereoName
         self.stripIDs = stripIDs
         self.strips = strips
+        self.meterParamId = meterParamId
     }
 }
 
@@ -129,6 +137,45 @@ public struct VisibleMixStrip: Identifiable, Equatable {
     public var gainDb: Double
     public var muted: Bool
     public var solo: Bool
+    public var meterParamId: String?
+    public var partnerMeterParamId: String?
+
+    public init(
+        id: String,
+        mixId: String,
+        slotIndex: Int,
+        partnerSlotIndex: Int? = nil,
+        title: String,
+        subtitle: String = "",
+        kind: String,
+        stereo: Bool,
+        gainDb: Double,
+        muted: Bool,
+        solo: Bool,
+        meterParamId: String? = nil,
+        partnerMeterParamId: String? = nil
+    ) {
+        self.id = id
+        self.mixId = mixId
+        self.slotIndex = slotIndex
+        self.partnerSlotIndex = partnerSlotIndex
+        self.title = title
+        self.subtitle = subtitle
+        self.kind = kind
+        self.stereo = stereo
+        self.gainDb = gainDb
+        self.muted = muted
+        self.solo = solo
+        self.meterParamId = meterParamId
+        self.partnerMeterParamId = partnerMeterParamId
+    }
+
+    public var meterIds: [String] {
+        [meterParamId, partnerMeterParamId].compactMap { id in
+            guard let id, !id.isEmpty else { return nil }
+            return id
+        }
+    }
 }
 
 public struct OutputPair: Identifiable, Equatable {
@@ -141,6 +188,31 @@ public struct OutputPair: Identifiable, Equatable {
     public var assignedMixId: String
     public var gainDb: Double
     public var muted: Bool
+    public var meterParamId: String?
+
+    public init(
+        id: String,
+        title: String,
+        kind: String,
+        leftId: String,
+        rightId: String? = nil,
+        isMonitor: Bool,
+        assignedMixId: String,
+        gainDb: Double = 0,
+        muted: Bool = false,
+        meterParamId: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.kind = kind
+        self.leftId = leftId
+        self.rightId = rightId
+        self.isMonitor = isMonitor
+        self.assignedMixId = assignedMixId
+        self.gainDb = gainDb
+        self.muted = muted
+        self.meterParamId = meterParamId
+    }
 }
 
 public enum MixerLayout {
@@ -173,6 +245,10 @@ public enum MixerLayout {
                 title = "Input \(index + 1)"
             }
             let strip = mix.strips.indices.contains(index) ? mix.strips[index] : MixStripState()
+            var partnerMeter: String?
+            if linked, let source, let sourceIndex = sources.firstIndex(where: { $0.id == source.id }), sourceIndex + 1 < sources.count {
+                partnerMeter = sources[sourceIndex + 1].meterParamId
+            }
             result.append(
                 VisibleMixStrip(
                     id: "\(mix.id)-\(index)",
@@ -185,7 +261,9 @@ public enum MixerLayout {
                     stereo: linked,
                     gainDb: strip.gainDb,
                     muted: strip.muted,
-                    solo: strip.solo
+                    solo: strip.solo,
+                    meterParamId: source?.meterParamId,
+                    partnerMeterParamId: partnerMeter
                 )
             )
             index += linked ? 2 : 1
@@ -222,7 +300,8 @@ public enum MixerLayout {
                     isMonitor: isMonitor,
                     assignedMixId: channel.assignedMixId,
                     gainDb: channel.gainDb,
-                    muted: channel.muted
+                    muted: channel.muted,
+                    meterParamId: channel.meterParamId
                 )
             )
         }
@@ -247,5 +326,10 @@ public enum MixerLayout {
             if partner < stripCount { indices.append(partner) }
         }
         return indices
+    }
+
+    /// Compact VU fill 0...1. Live meters are dBFS; −128 is digital silence.
+    public static func meterFill(db: Double, floor: Double = -60, ceiling: Double = 0) -> Double {
+        min(max((db - floor) / (ceiling - floor), 0), 1)
     }
 }

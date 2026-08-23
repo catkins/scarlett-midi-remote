@@ -1,158 +1,81 @@
-## Scarlett MIDI Control (macOS Menu Bar)
+## Scarlett MIDI Control
 
-Control your Focusrite Scarlett 18i20 (2nd Gen) hardware mixer and monitor levels from a MIDI controller. This macOS menu bar app discovers and talks to the local Focusrite Control server (the classic one used by the original iOS remote), letting you map MIDI CC/notes to common controls like Monitor volume and Mute.
+macOS menu-bar app that talks to **classic Focusrite Control** (not Control 2) so you can drive a **Scarlett 18i20 (2nd Gen)** mixer from MIDI and a compact SwiftUI panel.
 
-Status: MVP scaffold. Networking and protocol framing are implemented as stubs with clear TODOs and references. The UI, MIDI I/O, and persistence are ready to be wired up once the protocol is verified live against a running server.
+It does not copy any proprietary Focusrite code. Parameter IDs are discovered at runtime from `<device-arrival>`.
 
-### Why this exists
-- Focusrite's classic Control app exposes a local "FocusriteControlServer" process that iOS remotes used to connect to.
-- This project re-implements a minimal client for that legacy protocol so you can drive your interface from a MIDI controller while Focusrite Control is installed. It does not copy any proprietary Focusrite code.
+### What it does
+- Discovers `FocusriteControlServer` over UDP, connects over TCP, and waits for Remote Devices approval
+- Per-output mixer: pick an analogue destination, then mix hardware inputs and software playback with level / mute / solo
+- Stereo-linked channels collapse to **one fader**
+- MIDI Learn on **each** control: per-output master level/mute, and per-mix strip gain/mute/solo
+- Settings (client name, auto-reconnect, visible outputs, MIDI port, mapping list) live in a **gear popover** on the connection row
 
-### Supported devices
-- Targeted first: Scarlett 18i20 (2nd Gen)
-- Designed so other Gen 2 Scarletts can be added later
+### Requirements
+- macOS 14+
+- Classic Focusrite Control installed, with `FocusriteControlServer` running
+- Approve **Scarlett MIDI Control** in Focusrite Control → Settings → Remote Devices
+- Full Xcode (not just Command Line Tools) if you want to run `swift test` locally — CI has Xcode
 
----
-
-## Architecture (menu bar app)
-
-- `FocusriteControlKit` (framework)
-  - `DiscoveryService`: UDP discovery stub that models iOS client behavior (broadcast to 30096..30098). Replace stub with real UDP once you can capture replies on your Mac.
-  - `ControlServerClient`: TCP client using Network.framework with keep-alive and length-prefixed XML framing. Approval and device messages are placeholders until verified.
-  - `ProtocolFraming`: Encodes/decodes the classic `Length=<hex>` framing that wraps XML payloads. Footer handling is permissive during bring-up.
-  - `Scarlett18i20Gen2Model`: Simple device model (monitor L/R dB, mute).
-- `MidiKit` (framework)
-  - `MidiManager`: CoreMIDI input from a single selected port (by UID); "MIDI learn" callback captures CC/Note events. No "listen-to-all" pitfalls.
-- `PersistenceKit` (framework)
-  - `SettingsStore`: UserDefaults (`@AppStorage`) for client name, auto-reconnect, selected MIDI input UID + JSON file in Application Support for mappings.
-- SwiftUI Menu Bar App (`MenuBarExtra`)
-  - Menu bar icon reflects connection state (disconnected / awaiting approval / connected)
-  - Popover shows connection status, MIDI source picker (single selected port), primary monitor/mute controls, and per-control Learn buttons
-  - Optional "Open Full Panel" stub for expanded mix strips later
-
----
-
-## Protocol reference (public reverse‑engineering notes)
-
-Treat this as guidance. Verify everything against your running `FocusriteControlServer` on macOS.
-
-Sources:
-- Focusrite-Midi-Control (Swift): `https://github.com/raduvarga/Focusrite-Midi-Control`
-- UDP discovery gist: `https://gist.github.com/daveyijzermans/f0354858b3eb765e19361ab85a6bc55b`
-- Node API: `https://github.com/Mathieu2301/Focusrite-Control-API`
-
-Observed flow (classic iOS era, not Control 2):
-1. Discovery via UDP broadcast: send `Length=<6hex> <client-discovery app="SAFFIRE-CONTROL" version="4" device="iOS"/>` to ports 30096, 30097, 30098. Server replies with XML that includes a TCP port (commonly near 49152).
-2. Connect TCP, send client details (name + key), then periodic keep-alive (~3s).
-3. Receive device description, subscribe, and wait for the user to approve this client in Focusrite Control.
-4. Exchange value updates for controls/mixes.
-
-This app ships stubs for steps 1–4. See `docs/PROTOCOL.md` for message framing and TODOs.
-
----
-
-## Building locally (macOS)
-
-Prereqs:
-- macOS 13+ (Apple Silicon or Intel)
-- Xcode 14+ (or newer)
-- Classic Focusrite Control installed (not Control 2), so `FocusriteControlServer` runs locally
-- Homebrew (for XcodeGen), optional but recommended
-
-### Origin repository
-
-This project is developed in a Cursor **New Project** draft (`tmp-*` name). To use a permanent repo name:
-
-**Option A — Publish the draft (recommended)**  
-In the Cursor agent run UI, use **Publish** (or equivalent) and set the repo name to `scarlett-midi-control`. Draft repos are renamed on first publish.
-
-**Option B — Create a new repo from your Mac**  
-The Cloud Agent session cannot call `origin repo create` (token scoped to the draft only). On your machine:
+### Run locally
 
 ```bash
-origin auth login
-./scripts/create-origin-repo.sh
+./scripts/run-local.sh
 ```
 
-Or manually:
+That builds with SwiftPM, wraps an ad-hoc `.app`, and relaunches the menu-bar extra. Click the **mixer fader** icon (`slider.vertical.3`) in the menu bar.
+
+Optional XcodeGen project: `xcodegen generate` then open `ScarlettMidiControl.xcodeproj`.
+
+### MIDI Learn
+1. Click the piano-keys button on the connection row (it turns ember when armed).
+2. Click a fader, mute, or solo.
+3. Move a knob (CC) or hit a note on the selected MIDI input.
+4. An ember dot marks mapped faders. Clear mappings from the gear popover.
+
+Masters are keyed by output (Monitors uses the hardware monitor pair; Headphones is a different mapping). Mix strips are keyed by the mix assigned to that output (Mix A–E slot index).
+
+### Visible outputs
+By default only analogue pairs are shown (ADAT / S/PDIF hidden). Customize from the gear popover. The output switcher is a one-click chip grid, not a dropdown.
+
+---
+
+## Repository
+
+- Origin: `https://origin.cursor.com/catkins/scarlett-midi-remote.git`
+- There is **no GitHub remote**. Do not replace the `origin` remote.
+- License: MIT
+
+## CI (Buildkite)
+
+Pipeline: [catkins-test/scarlett-midi-remote](https://buildkite.com/catkins-test/scarlett-midi-remote)
+
+- Cluster: hosted macOS (`hosted-macos` queue)
+- Steps: lint, Test Engine (`bktec run`), and a release `.app` zip artifact
+- Artifact: `tmp/ScarlettMidiControl.app.zip` on the App step
+- Test Engine suite: `scarlett-midi-remote` (JUnit at `tmp/swift-test-results.xml`)
+- Definition: `.buildkite/pipeline.yml` (commands live in `scripts/ci.sh` so bash `${…}` is not interpolated at pipeline upload)
+- Shared SwiftPM cache: per-step volumes (`swift-test` / `swift-app`) so debug tests and the release .app do not share `.build`
+- Local helper: `./scripts/ci.sh` (skips SwiftLint if missing; Command Line Tools need extra flags for `import Testing`)
+
+Trigger builds from the Buildkite UI. Clone uses Origin (`https://origin.cursor.com/git/catkins/scarlett-midi-remote.git`).
+
+## Layout
+
+- `FocusriteControlKit` — discovery, TCP client, XML framing, device/mixer model
+- `MidiKit` — CoreMIDI input, mapping IDs (`MidiTarget`)
+- `PersistenceKit` — UserDefaults + `~/Library/Application Support/ScarlettMidiControl/mappings.json`
+- `App/` — menu-bar SwiftUI (mixer chrome, settings popover, snapshot renderer)
+
+Protocol notes: `docs/PROTOCOL.md`
+
+## Visual snapshots
+
+Agents (and you) can render the mixer chrome without clicking the menu bar:
 
 ```bash
-origin repo create catkins/scarlett-midi-control
-git remote set-url origin https://origin.cursor.com/git/catkins/scarlett-midi-control.git
-git push -u origin main
+./scripts/snapshot-ui.sh
+# writes .build/snapshots/mixer.png
 ```
 
-Current draft URL (until published): `https://origin.cursor.com/git/catkins/tmp-2dbf9251e3f2a0f2`
-
-Steps:
-1. Generate the Xcode project (we keep sources committed and generate the .xcodeproj locally):
-   ```bash
-   brew install xcodegen
-   xcodegen generate
-   open ScarlettMidiControl.xcodeproj
-   ```
-2. In Xcode, select the "ScarlettMidiControl" scheme and build/run. The app appears as a menu bar icon.
-3. Popover flow:
-   - Connection: Discover → Connect → approve the client in Focusrite Control when prompted.
-   - MIDI source: Pick exactly one MIDI input port (by name; bound by UID under the hood).
-   - Learn: Click Learn next to a control, move a knob (CC preferred) on the selected port; mapping saves automatically (UID + channel + type + number).
-   - Clear: Use Clear to unmap a control.
-
-Notes:
-- If hardware isn't detected, quitting and relaunching the Focusrite Control app (which restarts its server) often helps.
-- Local network permissions are not required on macOS, but firewall prompts may appear on first UDP/TCP use.
-
----
-
-## What’s implemented vs TODO
-
-Implemented:
-- SwiftUI menu bar UI: connection status, MIDI picker, primary controls, per-control Learn/Clear
-- CoreMIDI input from a single selected port (UID-based); MIDI Learn callback
-- Persistence for selected MIDI port UID and mappings (JSON in Application Support)
-- Protocol framing helpers (encode/decode `Length=<hex>` frames)
-
-TODO (verify against live server):
-- Replace discovery stub with real UDP broadcast and XML response parsing
-- Implement TCP handshake (client-details), approval state transitions, and subscribe to device updates
-- Map device XML paths to `Scarlett18i20Gen2Model` fields (monitor L/R, mute, mixes)
-- Send control updates (e.g., set monitor volumes/mute) using the verified message format
-
-All unverified assumptions are marked clearly in code comments.
-
----
-
-## Repository hygiene
-
-- License: MIT (`LICENSE`)
-- Xcode ignores in `.gitignore`
-- Sources organized into `App/` and `Sources/` with three frameworks
-- Project defined in `project.yml` for reproducible Xcode project generation
-
----
-
-## Contributing
-
-Please avoid copying proprietary Focusrite code or pasting verbatim copyrighted source from third-party apps. Implementation should be based only on public reverse‑engineering notes and what you can observe from your own device/server.
-
----
-
-## Acknowledgements
-
-Thanks to community reverse‑engineering efforts that documented parts of the classic protocol (linked above).
-
-# New project
-
-This project was created by a Cursor cloud agent.
-
----
-
-## CI
-
-Tests and SwiftLint run on Buildkite (org `catkins-test`, hosted macOS queue `hosted-macos`).
-
-- Pipeline definition: `.buildkite/pipeline.yml` (lint + `swift test`)
-- Local: `./scripts/ci.sh` — runs `swift test`, and SwiftLint when it is installed (`brew install swiftlint`)
-- SwiftLint config: `.swiftlint.yml` (relaxed Swift 6 / SwiftUI rules)
-
-The Buildkite pipeline clones `https://origin.cursor.com/catkins/scarlett-midi-remote.git`. There is no GitHub remote, so GitHub webhooks are not configured; start builds from the Buildkite UI until a GitHub repo is connected.
+The app also accepts `ScarlettMidiControl --snapshot /path/to/out.png` and exits.

@@ -74,6 +74,7 @@ struct MixerLayoutTests {
               </inputs>
               <mixes>
                 <mix id="54" name="Mix A" stereo-name="Mix A">
+                  <meter id="127"/>
                   <input><gain id="55"/><pan id="56"/><mute id="57"/><solo id="58"/></input>
                   <input><gain id="59"/><pan id="60"/><mute id="61"/><solo id="62"/></input>
                 </mix>
@@ -81,7 +82,7 @@ struct MixerLayoutTests {
             </mixer>
             <inputs>
               <analogue id="795" name="Analogue 1" stereo-name="Analogue 1-2">
-                <nickname id="796"/>
+                <nickname id="796"/><meter id="798"/>
               </analogue>
               <playback id="867" name="Playback 1" stereo-name="Playback 1-2">
                 <nickname id="868"/>
@@ -89,7 +90,7 @@ struct MixerLayoutTests {
             </inputs>
             <outputs>
               <analogue name="Monitor Output 1" stereo-name="Monitor Outputs 1-2">
-                <source id="952"/><mute id="951"/><gain id="956"/><stereo id="953"/>
+                <source id="952"/><mute id="951"/><gain id="956"/><stereo id="953"/><meter id="948"/>
               </analogue>
             </outputs>
             <monitoring>
@@ -110,5 +111,9 @@ struct MixerLayoutTests {
         #expect(map?.sourceNodes.contains(where: { $0.id == "795" }) == true)
         #expect(map?.sourceNodes.contains(where: { $0.id == "867" && $0.kind == "playback" }) == true)
         #expect(map?.outputs.first?.sourceParamId == "952")
+        #expect(map?.sourceNodes.first(where: { $0.id == "795" })?.meterParamId == "798")
+        #expect(map?.mixes.first?.meterParamId == "127")
+        #expect(map?.outputs.first?.meterParamId == "948")
+        #expect(map?.meterParamIds.contains("798") == true)
     }
 }

@@ -136,9 +136,10 @@ public final class MidiManager: NSObject, MidiManagerProtocol {
         let mySelf = Unmanaged<MidiManager>.fromOpaque(srcConnRefCon).takeUnretainedValue()
         var packet = packetList.pointee.packet
         for _ in 0..<packetList.pointee.numPackets {
-            let bytes = Mirror(reflecting: packet.data).children
-                .compactMap { $0.value as? UInt8 }
-            if bytes.count >= 3 {
+            withUnsafeBytes(of: packet.data) { raw in
+                let count = min(Int(packet.length), raw.count)
+                guard count >= 3 else { return }
+                let bytes = raw.bindMemory(to: UInt8.self)
                 let status = bytes[0]
                 let data1 = bytes[1]
                 let data2 = bytes[2]
@@ -152,10 +153,9 @@ public final class MidiManager: NSObject, MidiManagerProtocol {
                 case 0xE0: message.kind = .pitchBend
                 default: break
                 }
+                mySelf.onMessage?(message)
                 if mySelf.learningEnabled {
                     mySelf.onLearnedMessage?(message)
-                } else {
-                    mySelf.onMessage?(message)
                 }
             }
             packet = MIDIPacketNext(&packet).pointee

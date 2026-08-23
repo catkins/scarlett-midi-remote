@@ -12,6 +12,7 @@ public protocol SettingsStoring: AnyObject {
     var autoReconnect: Bool { get set }
     var hiddenOutputIds: [String] { get set }
     var didCustomizeHiddenOutputs: Bool { get set }
+    var highlightColorId: String { get set }
 }
 
 public final class SettingsStore: SettingsStoreProtocol {
@@ -56,7 +57,6 @@ public final class SettingsStore: SettingsStoreProtocol {
         }
         set { userDefaults.set(newValue, forKey: "clientKey") }
     }
-    
 
     public var hiddenOutputIds: [String] {
         get { userDefaults.stringArray(forKey: "hiddenOutputIds") ?? [] }
@@ -66,6 +66,11 @@ public final class SettingsStore: SettingsStoreProtocol {
     public var didCustomizeHiddenOutputs: Bool {
         get { userDefaults.bool(forKey: "didCustomizeHiddenOutputs") }
         set { userDefaults.set(newValue, forKey: "didCustomizeHiddenOutputs") }
+    }
+
+    public var highlightColorId: String {
+        get { userDefaults.string(forKey: "highlightColorId") ?? "purple" }
+        set { userDefaults.set(newValue, forKey: "highlightColorId") }
     }
 
     public func saveMappings<T: Encodable>(_ items: T) {

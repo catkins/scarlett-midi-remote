@@ -36,6 +36,12 @@ let package = Package(
             dependencies: ["FocusriteControlKit"],
             path: "Tests/FocusriteControlKitTests",
             swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "MidiKitTests",
+            dependencies: ["MidiKit"],
+            path: "Tests/MidiKitTests",
+            swiftSettings: [.swiftLanguageMode(.v6)]
         )
     ],
     swiftLanguageModes: [.v5]

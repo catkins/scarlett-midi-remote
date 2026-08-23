@@ -76,7 +76,12 @@ Each hardware output’s `source` value is a mix id (Mix A–E, L/R pair). Mixer
 
 Empty slots are omitted from the snapshot (treat missing mute/solo/source as false/empty).
 
+## Meters — verified live
+
+Inputs, playback, outputs, and each mix bus have a `<meter id="…"/>`. Values are dBFS in `<set>` items (`-128` is silence). Subscribe streams them. Per-strip VU uses the assigned source meter (max of L/R when stereo-linked); the output row uses the selected output meter.
+
 Writes:
+
 
 ```xml
 <set devid="1"><item id="55" value="0"/><item id="57" value="true"/></set>

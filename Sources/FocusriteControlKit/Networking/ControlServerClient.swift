@@ -15,9 +15,11 @@ public enum ConnectionState: Equatable {
 public protocol ControlServerClientProtocol {
     var statePublisher: AnyPublisher<ConnectionState, Never> { get }
     var devicePublisher: AnyPublisher<Scarlett18i20Gen2Model, Never> { get }
+    var meterPublisher: AnyPublisher<[String: Double], Never> { get }
     func connect(to server: DiscoveredServer)
     func disconnect()
     func requestDeviceSnapshot()
+    func setMeterUpdatesEnabled(_ enabled: Bool)
     func setMonitorMute(_ enabled: Bool)
     func setMonitorDb(_ value: Double)
     func setOutputGain(id: String, db: Double)
@@ -31,9 +33,11 @@ public final class ControlServerClient: ControlServerClientProtocol {
     private let queue = DispatchQueue(label: "com.example.ScarlettMidiControl.control")
     private let stateSubject = CurrentValueSubject<ConnectionState, Never>(.disconnected)
     private let deviceSubject = CurrentValueSubject<Scarlett18i20Gen2Model, Never>(Scarlett18i20Gen2Model())
+    private let meterSubject = CurrentValueSubject<[String: Double], Never>([:])
     
     public var statePublisher: AnyPublisher<ConnectionState, Never> { stateSubject.eraseToAnyPublisher() }
     public var devicePublisher: AnyPublisher<Scarlett18i20Gen2Model, Never> { deviceSubject.eraseToAnyPublisher() }
+    public var meterPublisher: AnyPublisher<[String: Double], Never> { meterSubject.eraseToAnyPublisher() }
     
     private var connection: NWConnection?
     private var keepAliveTimer: DispatchSourceTimer?
@@ -43,6 +47,10 @@ public final class ControlServerClient: ControlServerClientProtocol {
     private var reconnectWorkItem: DispatchWorkItem?
     private var userDisconnected = false
     private var parameters = DeviceParameterMap()
+    private var meterParamIds: Set<String> = []
+    private var meters: [String: Double] = [:]
+    private var meterUpdatesEnabled = false
+    private var meterFlushWork: DispatchWorkItem?
     /// Skip inbound echoes for IDs we just wrote so sliders don't fight the server.
     private var suppressInboundUntil: [String: Date] = [:]
     
@@ -69,6 +77,18 @@ public final class ControlServerClient: ControlServerClientProtocol {
         queue.async { [weak self] in
             guard let self, !self.parameters.deviceId.isEmpty else { return }
             self.sendXML(DeviceXML.subscribeMessage(deviceId: self.parameters.deviceId))
+        }
+    }
+
+    public func setMeterUpdatesEnabled(_ enabled: Bool) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.meterUpdatesEnabled = enabled
+            self.meterFlushWork?.cancel()
+            self.meterFlushWork = nil
+            if enabled {
+                self.meterSubject.send(self.meters)
+            }
         }
     }
     
@@ -346,9 +366,13 @@ public final class ControlServerClient: ControlServerClientProtocol {
                         name: mix.name,
                         stereoName: mix.stereoName,
                         stripIDs: mix.strips,
-                        strips: mix.strips.map { _ in MixStripState() }
+                        strips: mix.strips.map { _ in MixStripState() },
+                        meterParamId: mix.meterParamId
                     )
                 }
+                meterParamIds = map.meterParamIds
+                meters = [:]
+                meterSubject.send([:])
                 deviceSubject.send(model)
                 sendXML(DeviceXML.subscribeMessage(deviceId: map.deviceId))
             }
@@ -363,17 +387,47 @@ public final class ControlServerClient: ControlServerClientProtocol {
     }
     
     private func applySetItems(_ items: [(id: String, value: String)]) {
-        var model = deviceSubject.value
+        var metersChanged = false
+        var mixerItems: [(id: String, value: String)] = []
         let now = Date()
         for item in items {
             if let until = suppressInboundUntil[item.id], now < until {
                 continue
             }
+            if meterParamIds.contains(item.id), let db = Double(item.value) {
+                let quantized = (db * 2).rounded() / 2
+                if meters[item.id] != quantized {
+                    meters[item.id] = quantized
+                    metersChanged = true
+                }
+                continue
+            }
+            mixerItems.append(item)
+        }
+        if metersChanged {
+            scheduleMeterFlush()
+        }
+        guard !mixerItems.isEmpty else { return }
+        var model = deviceSubject.value
+        for item in mixerItems {
             apply(item, to: &model)
         }
         if model != deviceSubject.value {
             deviceSubject.send(model)
         }
+    }
+
+    private func scheduleMeterFlush() {
+        guard meterUpdatesEnabled, meterFlushWork == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.meterFlushWork = nil
+            if self.meterUpdatesEnabled {
+                self.meterSubject.send(self.meters)
+            }
+        }
+        meterFlushWork = work
+        queue.asyncAfter(deadline: .now() + 0.125, execute: work)
     }
     
     private func apply(_ item: (id: String, value: String), to model: inout Scarlett18i20Gen2Model) {
@@ -475,6 +529,11 @@ public final class ControlServerClient: ControlServerClientProtocol {
         connection?.cancel()
         connection = nil
         inboundBuffer.removeAll()
+        meterFlushWork?.cancel()
+        meterFlushWork = nil
+        meters = [:]
+        meterParamIds = []
+        meterSubject.send([:])
         stateSubject.send(state)
     }
     
