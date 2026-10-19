@@ -38,6 +38,26 @@ That builds with SwiftPM, wraps an ad-hoc `.app`, and relaunches the menu-bar ex
 
 Optional XcodeGen project: `xcodegen generate` then open `ScarlettMidiControl.xcodeproj`.
 
+### Install a release build
+
+```bash
+./scripts/install-local.sh
+```
+
+This builds the release app, quits any running copy, installs it to
+`~/Applications/ScarlettMidiControl.app`, and launches it. Run the same command
+again to update the installed app.
+
+To launch it when you log in, open **System Settings → General → Login Items &
+Extensions** and add the installed app under **Open at Login**.
+
+If Command Line Tools reports a missing `SwiftUIMacros` plugin with the macOS 27
+SDK, select an installed macOS 26 SDK explicitly. On a Mac with the 26.5 SDK:
+
+```bash
+SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk ./scripts/install-local.sh
+```
+
 ### Opening a downloaded build
 
 CI uploads an ad-hoc-signed zip. Gatekeeper will refuse it with *Apple could not verify “ScarlettMidiControl”* and only **Move to Trash** / **Done**. After unzipping:
